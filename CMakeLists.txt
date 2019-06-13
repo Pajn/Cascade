@@ -14,6 +14,14 @@ pkg_check_modules(WAYLAND_CLIENT REQUIRED wayland-client)
 pkg_check_modules(XKBCOMMON xkbcommon REQUIRED)
 find_package(Boost COMPONENTS filesystem REQUIRED)
 
+pkg_check_modules(MIRWAYLAND mirwayland REQUIRED)
+pkg_check_modules(WAYLAND_SERVER REQUIRED wayland-server)
+#pkg_check_modules(MIRAL mircommon REQUIRED) # Mir bug #868
+set(MIRCOMMON_INCLUDE_DIRS /usr/include/mircommon/)
+set(MIRCOMMON_LDFLAGS "-lmircommon")
+
+add_subdirectory(wayland-generated)
+
 add_executable(egmde
     egmde.cpp
     eglauncher.cpp eglauncher.h
@@ -21,7 +29,10 @@ add_executable(egmde
     egwindowmanager.cpp egwindowmanager.h
     egworker.cpp egworker.h
     printer.cpp printer.h
-        egfullscreenclient.cpp egfullscreenclient.h)
+    egfullscreenclient.cpp egfullscreenclient.h
+    wayland-generated/primary-selection-unstable-v1_wrapper.cpp
+    wayland-generated/primary-selection-unstable-v1_wrapper.h
+)
 
 execute_process(
     COMMAND grep ^NAME= /etc/os-release 
@@ -40,10 +51,17 @@ endif()
 
 set_source_files_properties(egmde.cpp PROPERTIES COMPILE_DEFINITIONS EGMDE_WALLPAPER_BOTTOM="${EGMDE_WALLPAPER_BOTTOM}")
 
-target_include_directories(egmde PUBLIC SYSTEM ${MIRAL_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS} ${FREETYPE_INCLUDE_DIRS})
-target_link_libraries(     egmde               ${MIRAL_LDFLAGS}      ${WAYLAND_CLIENT_LIBRARIES}  ${Boost_LIBRARIES}    ${FREETYPE_LIBRARIES})
-target_link_libraries(     egmde               ${XKBCOMMON_LIBRARIES})
-
+target_include_directories(egmde PUBLIC SYSTEM ${MIRAL_INCLUDE_DIRS} ${MIRCOMMON_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS} ${FREETYPE_INCLUDE_DIRS})
+target_link_libraries(egmde
+  ${MIRAL_LDFLAGS}
+  ${MIRWAYLAND_LDFLAGS}
+  ${MIRCOMMON_LDFLAGS}
+  ${WAYLAND_CLIENT_LIBRARIES}
+  ${WAYLAND_SERVER_LDFLAGS}
+  ${Boost_LIBRARIES}
+  ${FREETYPE_LIBRARIES}
+  ${XKBCOMMON_LIBRARIES}
+)
 
 add_custom_target(egmde-launch ALL
     cp ${CMAKE_CURRENT_SOURCE_DIR}/egmde-launch.sh ${CMAKE_BINARY_DIR}/egmde-launch
