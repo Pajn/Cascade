@@ -19,6 +19,7 @@
 #include "egwallpaper.h"
 #include "egwindowmanager.h"
 #include "eglauncher.h"
+#include "primary_selection.h"
 
 #include <miral/append_event_filter.h>
 #include <miral/command_line_option.h>
@@ -112,10 +113,14 @@ int main(int argc, char const* argv[])
     runner.add_stop_callback([&] { wallpaper.stop(); });
     runner.add_stop_callback([&] { launcher.stop(); });
 
+    WaylandExtensions wayland_extensions;
+
+    wayland_extensions.add_extension(egmde::primary_selection_extension());
+
     return runner.run_with(
         {
             X11Support{},
-            WaylandExtensions{},
+            wayland_extensions,
             DisplayConfiguration{runner},
             CommandLineOption{[&](auto& option) { wallpaper.top(option);},
                               "wallpaper-top",    "Colour of wallpaper RGB", "0x000000"},
