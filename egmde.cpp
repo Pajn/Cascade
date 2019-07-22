@@ -29,6 +29,7 @@
 #include <miral/keymap.h>
 #include <miral/runner.h>
 #include <miral/set_window_management_policy.h>
+#include <miral/version.h>
 #include <miral/wayland_extensions.h>
 
 #include <miral/x11_support.h>
@@ -116,7 +117,14 @@ int main(int argc, char const* argv[])
 
     WaylandExtensions wayland_extensions;
     wayland_extensions.add_extension(egmde::primary_selection_extension());
+
+#if MIRAL_VERSION >= MIR_VERSION_NUMBER(2, 7, 0)
     wayland_extensions.add_extension(egmde::gtk_primary_selection_extension());
+#else
+    // With Mir 1.3.0 (the current release) enabling this protocol leads
+    // to GTK3 based applications crashing.
+    wayland_extensions.add_extension_disabled_by_default(egmde::gtk_primary_selection_extension());
+#endif
 
     return runner.run_with(
         {
