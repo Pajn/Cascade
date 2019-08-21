@@ -16,6 +16,7 @@
  * Authored by: Alan Griffiths <alan@octopull.co.uk>
  */
 
+#include "rust_wm/rust_wm.h"
 #include "egwindowmanager.h"
 #include "egwallpaper.h"
 
@@ -68,6 +69,7 @@ void egmde::WindowManagerPolicy::keep_size_within_limits(
 
 egmde::WindowManagerPolicy::WindowManagerPolicy(WindowManagerTools const& tools, Wallpaper const& wallpaper) :
     MinimalWindowManager{tools},
+    tools{tools},
     wallpaper{&wallpaper}
 {
 }
@@ -76,6 +78,7 @@ miral::WindowSpecification egmde::WindowManagerPolicy::place_new_window(
     miral::ApplicationInfo const& app_info, miral::WindowSpecification const& request_parameters)
 {
     auto result = MinimalWindowManager::place_new_window(app_info, request_parameters);
+    rust::place_new_window(&result);
 
     if (app_info.application() == wallpaper->session())
     {
@@ -83,4 +86,11 @@ miral::WindowSpecification egmde::WindowManagerPolicy::place_new_window(
     }
 
     return result;
+}
+
+bool egmde::WindowManagerPolicy::handle_keyboard_event(MirKeyboardEvent const* event)
+{
+    auto window = tools.active_window();
+    printf("window: %p\n", (void *) &window);
+    return rust::handle_keyboard_event(&tools, &window, event);
 }

@@ -20,6 +20,7 @@
 #define EGMDE_EGWINDOWMANAGER_H
 
 #include <miral/minimal_window_manager.h>
+#include <miral/window_manager_tools.h>
 
 namespace egmde
 {
@@ -35,7 +36,10 @@ public:
     auto place_new_window(ApplicationInfo const& app_info, WindowSpecification const& request_parameters)
         -> WindowSpecification override;
 
+    bool handle_keyboard_event(MirKeyboardEvent const* event) override;
+
 private:
+    miral::WindowManagerTools tools;
     Wallpaper const* wallpaper;
 
     void keep_size_within_limits(

@@ -21,7 +21,8 @@ add_executable(egmde
     egwindowmanager.cpp egwindowmanager.h
     egworker.cpp egworker.h
     printer.cpp printer.h
-        egfullscreenclient.cpp egfullscreenclient.h)
+    egfullscreenclient.cpp egfullscreenclient.h
+    rust_wm/rust_wm.h)
 
 execute_process(
     COMMAND grep ^NAME= /etc/os-release 
@@ -43,6 +44,7 @@ set_source_files_properties(egmde.cpp PROPERTIES COMPILE_DEFINITIONS EGMDE_WALLP
 target_include_directories(egmde PUBLIC SYSTEM ${MIRAL_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS} ${FREETYPE_INCLUDE_DIRS})
 target_link_libraries(     egmde               ${MIRAL_LDFLAGS}      ${WAYLAND_CLIENT_LIBRARIES}  ${Boost_LIBRARIES}    ${FREETYPE_LIBRARIES})
 target_link_libraries(     egmde               ${XKBCOMMON_LIBRARIES})
+target_link_libraries(     egmde               ${CMAKE_BINARY_DIR}/../rust_wm/target/debug/librust_wm.so)
 
 
 add_custom_target(egmde-launch ALL
