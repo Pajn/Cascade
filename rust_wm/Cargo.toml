@@ -9,6 +9,7 @@ crate-type = ["staticlib", "cdylib"]
 
 [dependencies]
 mir_rs = { path = "../mir_rs"}
+xkbcommon = "0.4.0"
 
 [build-dependencies]
 cbindgen = "0.9.0"

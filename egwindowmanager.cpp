@@ -19,6 +19,7 @@
 #include "rust_wm/rust_wm.h"
 #include "egwindowmanager.h"
 #include "egwallpaper.h"
+#include "eglauncher.h"
 
 #include <miral/application_info.h>
 #include <miral/window_info.h>
@@ -67,22 +68,28 @@ void egmde::WindowManagerPolicy::keep_size_within_limits(
     }
 }
 
-egmde::WindowManagerPolicy::WindowManagerPolicy(WindowManagerTools const& tools, Wallpaper const& wallpaper) :
+egmde::WindowManagerPolicy::WindowManagerPolicy(WindowManagerTools const& tools, Wallpaper const& wallpaper, Launcher const& launcher) :
     MinimalWindowManager{tools},
-    tools{tools},
-    wallpaper{&wallpaper}
+    wallpaper{&wallpaper},
+    launcher{&launcher}
 {
+    this->tools = std::make_shared<WindowManagerTools>(tools);
+    wm = rust::init_wm(this->tools.get());
 }
 
 miral::WindowSpecification egmde::WindowManagerPolicy::place_new_window(
     miral::ApplicationInfo const& app_info, miral::WindowSpecification const& request_parameters)
 {
     auto result = MinimalWindowManager::place_new_window(app_info, request_parameters);
-    rust::place_new_window(&result);
+    rust::place_new_window(wm, &result);
 
     if (app_info.application() == wallpaper->session())
     {
         result.type() = mir_window_type_decoration;
+    }
+    if (app_info.application() == launcher->session())
+    {
+        result.type() = mir_window_type_dialog;
     }
 
     return result;
@@ -90,7 +97,52 @@ miral::WindowSpecification egmde::WindowManagerPolicy::place_new_window(
 
 bool egmde::WindowManagerPolicy::handle_keyboard_event(MirKeyboardEvent const* event)
 {
-    auto window = tools.active_window();
-    printf("window: %p\n", (void *) &window);
-    return rust::handle_keyboard_event(&tools, &window, event);
+    return rust::handle_keyboard_event(wm, event) 
+        || MinimalWindowManager::handle_keyboard_event(event);
+}
+
+void egmde::WindowManagerPolicy::handle_window_ready(WindowInfo& window_info)
+{
+    MinimalWindowManager::handle_window_ready(window_info);
+    rust::handle_window_ready(wm, &window_info);
+}
+
+void egmde::WindowManagerPolicy::advise_focus_gained(WindowInfo const& window_info)
+{
+    MinimalWindowManager::advise_focus_gained(window_info);
+    rust::advise_focus_gained(wm, &window_info);
+}
+void egmde::WindowManagerPolicy::advise_delete_window(WindowInfo const& window_info)
+{
+    rust::advise_delete_window(wm, &window_info);
+}
+void egmde::WindowManagerPolicy::handle_modify_window(WindowInfo& window_info, WindowSpecification const& modifications)
+{
+    MinimalWindowManager::handle_modify_window(window_info, modifications);
+    rust::handle_modify_window(wm, &window_info, &modifications);
+}
+
+extern "C" void* get_active_window(miral::WindowManagerTools* tools)
+{
+    Window window = tools->active_window();
+    std::shared_ptr<Window> window_ptr = std::make_shared<Window>();
+    *window_ptr = window;
+    return static_cast<void*>(new std::shared_ptr<Window>(window_ptr));
+}
+
+extern "C" void select_active_window(miral::WindowManagerTools* tools, Window const* hint)
+{
+    printf("tools %p, hint: %p\n", (void*) tools, (void*) hint);
+    tools->select_active_window(*hint);
+}
+
+extern "C" Window* rust_get_window(std::shared_ptr<Window> window)
+{
+    return window.get();
+}
+
+extern "C" void rust_drop_window(void* ptr)
+{
+    std::shared_ptr<Window> *value = static_cast<std::shared_ptr<Window>*>(ptr);
+    delete value;
 }

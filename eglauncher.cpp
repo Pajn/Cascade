@@ -596,3 +596,15 @@ void egmde::Launcher::Self::keyboard_leave(wl_keyboard* /*keyboard*/, uint32_t /
     running = false;
     for_each_surface([this](auto& info) { draw_screen(info); });
 }
+
+void egmde::Launcher::operator()(std::weak_ptr<mir::scene::Session> const& session)
+{
+    std::lock_guard<decltype(mutex)> lock{mutex};
+    weak_session = session;
+}
+
+auto egmde::Launcher::session() const -> std::shared_ptr<mir::scene::Session>
+{
+    std::lock_guard<decltype(mutex)> lock{mutex};
+    return weak_session.lock();
+}

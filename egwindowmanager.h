@@ -21,26 +21,34 @@
 
 #include <miral/minimal_window_manager.h>
 #include <miral/window_manager_tools.h>
+#include "rust_wm/rust_wm.h"
 
 namespace egmde
 {
 using namespace miral;
 class Wallpaper;
+class Launcher;
 
 class WindowManagerPolicy :
     public MinimalWindowManager
 {
 public:
-    WindowManagerPolicy(WindowManagerTools const& tools, Wallpaper const& wallpaper);
+    WindowManagerPolicy(WindowManagerTools const& tools, Wallpaper const& wallpaper, Launcher const& launcher);
 
     auto place_new_window(ApplicationInfo const& app_info, WindowSpecification const& request_parameters)
         -> WindowSpecification override;
 
+    void handle_window_ready(WindowInfo& window_info) override;
     bool handle_keyboard_event(MirKeyboardEvent const* event) override;
+    void advise_focus_gained(WindowInfo const& window_info) override;
+    void advise_delete_window(WindowInfo const& window_info) override;
+    void handle_modify_window(WindowInfo& window_info, WindowSpecification const& modifications) override;
 
 private:
-    miral::WindowManagerTools tools;
+    rust::WindowManager* wm;
+    std::shared_ptr<miral::WindowManagerTools> tools;
     Wallpaper const* wallpaper;
+    Launcher const* launcher;
 
     void keep_size_within_limits(
         WindowInfo const& window_info, Displacement& delta, Width& new_width, Height& new_height) const;

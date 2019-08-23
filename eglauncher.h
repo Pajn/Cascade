@@ -36,7 +36,9 @@ public:
 
     // These operators are the protocol for an "Internal Client"
     void operator()(wl_display* display);
-    void operator()(std::weak_ptr<mir::scene::Session> const&){ }
+    void operator()(std::weak_ptr<mir::scene::Session> const& session);
+
+    auto session() const -> std::shared_ptr<mir::scene::Session>;
 
     void show();
 
@@ -45,6 +47,7 @@ public:
 private:
     miral::ExternalClientLauncher& external_client_launcher;
     std::mutex mutable mutex;
+    std::weak_ptr<mir::scene::Session> weak_session;
 
     struct Self;
     std::weak_ptr<Self> self;
