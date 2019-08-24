@@ -1,11 +1,9 @@
 use crate::entities::*;
 use std::cmp;
 
-pub fn arange_windows(wm: &mut WindowManager) -> () {
+fn update_cached_positions(wm: &mut WindowManager, workspace_id: Id) -> () {
   let positions = wm
-    .workspaces
-    .get(&wm.active_workspace)
-    .unwrap()
+    .get_workspace(workspace_id)
     .windows
     .iter()
     .filter_map(|window_id| {
@@ -19,7 +17,7 @@ pub fn arange_windows(wm: &mut WindowManager) -> () {
     })
     .scan(0, |next_x, window| {
       let x = *next_x;
-      *next_x = x + window.width();
+      *next_x = x + window.size.width;
       Some((window.id, x))
     })
     .collect::<Vec<_>>();
@@ -28,23 +26,70 @@ pub fn arange_windows(wm: &mut WindowManager) -> () {
     let monitor = wm.monitor_by_window(window_id);
     let window = wm.get_window(window_id);
 
-    let old_x = window.x();
-    let old_y = window.y();
-    let old_height = window.height();
-
     let height = match monitor {
       Some(monitor) => cmp::min(monitor.size.height, window.max_height()),
-      None => old_height,
+      None => window.height(),
     };
 
     let y = match monitor {
       Some(monitor) => (monitor.size.height - height) / 2,
-      None => old_y,
+      None => window.y(),
     };
 
-    if old_height != height {
+    let window = wm.windows.get_mut(&window_id).unwrap();
+
+    window.x = x;
+    window.y = y;
+    window.size.height = height;
+  }
+}
+
+pub fn ensure_window_visible(wm: &mut WindowManager, window_id: Id) -> () {
+  if let Some(monitor) = wm.monitor_by_window(window_id) {
+    let monitor_width = monitor.size.width;
+    let window = wm.get_window(window_id);
+    let window_x = window.x;
+    let window_width = window.width();
+    let workspace = wm.workspaces.get_mut(&wm.active_workspace).unwrap();
+
+    let x_window_left = window_x;
+    let x_window_right = window_x + window_width;
+
+    let x_workspace_left = workspace.scroll_left;
+    let x_workspace_right = workspace.scroll_left + monitor_width;
+
+    if x_window_left < x_workspace_left {
+      workspace.scroll_left = x_window_left;
+    } else if x_window_right > x_workspace_right {
+      workspace.scroll_left = x_window_right - monitor_width;
+    }
+  } else {
+    println!(
+      "ensure_window_visible on window \"{}\" not on any monitor",
+      window_id
+    );
+  }
+}
+
+pub fn update_window_positions(wm: &mut WindowManager, workspace_id: Id) -> () {
+  let workspace = wm.get_workspace(workspace_id);
+  let scroll_left = workspace.scroll_left;
+  let windows = workspace.get_tiled_windows(wm);
+
+  for window_id in windows {
+    let window = wm.get_window(window_id);
+
+    let old_x = window.x();
+    let old_y = window.y();
+    let old_size = window.rendered_size();
+
+    let x = window.x - scroll_left;
+    let y = window.y;
+    let size = window.size.clone();
+
+    if size != old_size {
       let window = wm.windows.get_mut(&window_id).unwrap();
-      window.resize(window.width(), height);
+      window.resize(size);
     }
 
     if old_x != x || old_y != y {
@@ -52,6 +97,17 @@ pub fn arange_windows(wm: &mut WindowManager) -> () {
       window.move_to(x, y);
     }
   }
+}
+
+pub fn arrange_windows(wm: &mut WindowManager) -> () {
+  update_cached_positions(wm, wm.active_workspace);
+  if let Some(active_window) = wm.active_window() {
+    if active_window.is_tiled() {
+      let id = active_window.id;
+      ensure_window_visible(wm, id);
+    }
+  }
+  update_window_positions(wm, wm.active_workspace);
 }
 
 pub enum Direction {
@@ -122,7 +178,7 @@ pub fn move_window(wm: &mut WindowManager, direction: Direction) {
             .expect("move window active workspace")
             .windows
             .swap(raw_index, new_raw_index);
-          arange_windows(wm);
+          arrange_windows(wm);
         }
       }
     }

@@ -58,6 +58,7 @@ style = "both"
 [export]
 include = []
 exclude = [
+  "window_info_has_parent",
   "get_active_window",
   "rust_drop_window",
   "rust_get_window",

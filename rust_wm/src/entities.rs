@@ -1,5 +1,6 @@
 use crate::ffi_helpers::*;
 use mir_rs::*;
+use std::cmp;
 use std::collections::BTreeMap;
 
 pub type Id = u64;
@@ -21,10 +22,19 @@ impl IdGenerator {
   }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Size {
   pub width: i32,
   pub height: i32,
+}
+
+impl Size {
+  pub fn width(&self, width: i32) -> Size {
+    Size {
+      width,
+      height: self.height,
+    }
+  }
 }
 
 #[derive(Debug)]
@@ -32,6 +42,10 @@ pub struct Window {
   pub id: Id,
   pub workspace: Id,
   pub window_info: *mut miral::WindowInfo,
+  pub x: i32,
+  pub y: i32,
+  pub size: Size,
+  pub has_parent: bool,
 }
 
 impl Window {
@@ -44,6 +58,13 @@ impl Window {
       id: id_generator.next_id(),
       workspace,
       window_info,
+      x: 0,
+      y: 0,
+      size: Size {
+        width: 0,
+        height: 0,
+      },
+      has_parent: unsafe { window_info_has_parent(window_info) },
     }
   }
 
@@ -63,12 +84,38 @@ impl Window {
     unsafe { (*(*self.window_info).window()).size().height.value }
   }
 
+  pub fn rendered_size(&self) -> Size {
+    Size {
+      width: self.width(),
+      height: self.height(),
+    }
+  }
+
   pub fn max_height(&self) -> i32 {
     unsafe { ((*self.window_info).max_height()).value }
   }
 
-  pub fn resize(&mut self, width: i32, height: i32) {
-    let size = mir::geometry::Size::new(width, height);
+  pub fn min_height(&self) -> i32 {
+    unsafe { ((*self.window_info).min_height()).value }
+  }
+
+  pub fn max_width(&self) -> i32 {
+    unsafe { ((*self.window_info).max_width()).value }
+  }
+
+  pub fn min_width(&self) -> i32 {
+    unsafe { ((*self.window_info).min_width()).value }
+  }
+
+  pub fn set_size(&mut self, mut size: Size) {
+    size.width = cmp::max(cmp::min(size.width, self.max_width()), self.min_width());
+    size.height = cmp::max(cmp::min(size.height, self.max_height()), self.min_height());
+    self.size = size;
+  }
+
+  pub fn resize(&mut self, size: Size) {
+    self.set_size(size);
+    let size = mir::geometry::Size::new(self.size.width, self.size.height);
     unsafe { (*(*self.window_info).window()).resize(&size) }
   }
 
@@ -87,10 +134,15 @@ impl Window {
     //   )
     // };
     unsafe {
-      ((*self.window_info).type_() == raw::MirWindowType::mir_window_type_normal
-        || (*self.window_info).type_() == raw::MirWindowType::mir_window_type_freestyle)
+      !window_info_has_parent(self.window_info)
+        && ((*self.window_info).type_() == raw::MirWindowType::mir_window_type_normal
+          || (*self.window_info).type_() == raw::MirWindowType::mir_window_type_freestyle)
         && (*self.window_info).state() != raw::MirWindowState::mir_window_state_fullscreen
     }
+  }
+
+  pub fn ask_client_to_close(&self, wm: &WindowManager) -> () {
+    unsafe { (*wm.tools).ask_client_to_close((*self.window_info).window()) };
   }
 }
 
@@ -99,6 +151,7 @@ pub struct Workspace {
   pub id: Id,
   pub on_monitor: Option<Id>,
   pub windows: Vec<Id>,
+  pub scroll_left: i32,
 }
 
 impl Workspace {
@@ -107,6 +160,7 @@ impl Workspace {
       id: id_generator.next_id(),
       on_monitor: None,
       windows: vec![],
+      scroll_left: 0,
     }
   }
 
@@ -215,6 +269,10 @@ impl WindowManager {
       .find(|w| w.window_info as *const _ == window_info)
   }
 
+  pub fn active_window(&self) -> Option<&Window> {
+    self.active_window.and_then(|id| self.windows.get(&id))
+  }
+
   pub fn active_workspace(&self) -> &Workspace {
     self
       .workspaces
@@ -258,7 +316,7 @@ impl WindowManager {
   }
 
   pub fn add_window(&mut self, window: Window) -> () {
-    println!("WM: {:?}", &self);
+    println!("WM: {:?}, adding: {:?}", &self, &window);
     let workspace = self.workspaces.get_mut(&self.active_workspace).unwrap();
 
     if let Some(active_window) = self.active_window {
@@ -270,7 +328,10 @@ impl WindowManager {
       workspace.windows.push(window.id);
     }
 
-    self.active_window = Some(window.id);
+    if !window.has_parent {
+      self.active_window = Some(window.id);
+      self.active_workspace = window.workspace;
+    }
 
     self.windows.insert(window.id, window);
   }
@@ -287,6 +348,7 @@ impl WindowManager {
       .0;
 
     workspace.windows.remove(index);
+    self.windows.remove(&window_id);
 
     if self.active_window == Some(window_id) {
       // Mir will focus a new window for us so we can just unset

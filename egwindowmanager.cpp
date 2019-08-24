@@ -135,6 +135,11 @@ void egmde::WindowManagerPolicy::advise_output_delete(Output const& output)
     rust::advise_output_delete(wm, &output);
 }
 
+extern "C" bool window_info_has_parent(miral::WindowInfo& window_info)
+{
+    return !!window_info.parent();
+}
+
 extern "C" void* get_active_window(miral::WindowManagerTools* tools)
 {
     Window window = tools->active_window();

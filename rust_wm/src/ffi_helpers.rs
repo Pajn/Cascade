@@ -6,6 +6,7 @@ pub struct SharedPtrWindow(*mut miral::Window);
 
 #[allow(unused)]
 extern "C" {
+  pub fn window_info_has_parent(window_info: *const miral::WindowInfo) -> bool;
   pub fn get_active_window(value: *const miral::WindowManagerTools) -> SharedPtrWindow;
   pub fn select_active_window(
     value: *const miral::WindowManagerTools,

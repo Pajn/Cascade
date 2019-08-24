@@ -3,14 +3,16 @@ mod entities;
 mod ffi_helpers;
 mod keyboard;
 
-use crate::actions::arange_windows;
+use crate::actions::*;
 use crate::entities::*;
+use crate::ffi_helpers::*;
 use crate::keyboard::*;
 use mir_rs::*;
 use std::collections::BTreeMap;
 use std::mem::transmute;
 
 fn is_tiled(window: &miral::WindowSpecification) -> bool {
+  let parent = unsafe { (*(*window).parent()).as_ref() };
   let type_ = unsafe {
     (*(*window).type_())
       .as_ref()
@@ -24,8 +26,14 @@ fn is_tiled(window: &miral::WindowSpecification) -> bool {
       .unwrap_or(raw::MirWindowState::mir_window_state_unknown)
   };
 
-  (type_ == raw::MirWindowType::mir_window_type_normal
-    || type_ == raw::MirWindowType::mir_window_type_freestyle)
+  println!(
+    "is_tiled_raw parent: {:?}, type: {:?}, state: {:?}",
+    parent, type_, state
+  );
+
+  parent.is_none()
+    && (type_ == raw::MirWindowType::mir_window_type_normal
+      || type_ == raw::MirWindowType::mir_window_type_freestyle)
     && state != raw::MirWindowState::mir_window_state_fullscreen
 }
 
@@ -57,6 +65,7 @@ pub extern "C" fn place_new_window(
   let window_specification = unsafe { &mut *window_specification };
 
   if is_tiled(window_specification) {
+    println!("place_new_window tiled");
     if let Some(mut point) = unsafe { &mut *window_specification.top_left1() }.as_mut() {
       point.x.value = wm
         .active_window
@@ -70,6 +79,8 @@ pub extern "C" fn place_new_window(
         size.height.value = monitor.size.height;
       }
     }
+  } else {
+    println!("place_new_window not tiled");
   }
 }
 
@@ -81,16 +92,29 @@ pub extern "C" fn handle_window_ready(
   let wm = unsafe { &mut *wm };
   let window_info = unsafe { &mut *window_info };
 
-  let window = Window::new(
+  let mut window = Window::new(
     &mut wm.window_id_generator,
     wm.active_workspace,
     window_info,
   );
+  window.x = window.x();
+  window.y = window.y();
+  window.size = window.rendered_size();
+
+  let type_ = unsafe { window_info.type_() };
+  let has_parent = unsafe { window_info_has_parent(window_info) };
+  if window.is_tiled() {
+    println!(
+      "handle_window_ready tiled type_ {}, has_parent {}",
+      type_, has_parent
+    );
+  } else {
+    println!("handle_window_ready not tiled");
+  }
+
   wm.add_window(window);
 
-  arange_windows(wm);
-
-  println!("handle_window_ready {:?}", &wm);
+  arrange_windows(wm);
 }
 
 #[no_mangle]
@@ -103,18 +127,28 @@ pub extern "C" fn advise_focus_gained(
   if let Some(window_id) = wm.window_by_info(window_info).map(|w| w.id) {
     wm.active_window = Some(window_id);
     wm.active_workspace = wm.get_window(window_id).workspace;
+
+    ensure_window_visible(wm, window_id);
+    update_window_positions(wm, wm.get_window(window_id).workspace);
   }
 }
 
 #[no_mangle]
 pub extern "C" fn handle_modify_window(
   wm: *mut WindowManager,
-  _window_info: *const miral::WindowInfo,
+  window_info: *const miral::WindowInfo,
   _modifications: *const miral::WindowSpecification,
 ) -> () {
   let wm = unsafe { &mut *wm };
 
-  arange_windows(wm);
+  let window = wm
+    .window_by_info(window_info)
+    .map(|w| w.id)
+    .and_then(|id| wm.windows.get_mut(&id))
+    .expect("Could get modified window");
+  window.size = window.rendered_size();
+
+  arrange_windows(wm);
 }
 
 #[no_mangle]
@@ -170,6 +204,7 @@ pub extern "C" fn advise_output_update(
     .find(|(_, m)| m.output == original)
     .expect("monitor advise_output_update")
     .1;
+  monitor.output = updated;
   monitor.size = new_size;
 }
 

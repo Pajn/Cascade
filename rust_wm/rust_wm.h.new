@@ -33,7 +33,7 @@ void advise_output_update(WindowManager *wm, const Output *updated, const Output
 bool handle_keyboard_event(WindowManager *wm, const MirKeyboardEvent *event);
 
 void handle_modify_window(WindowManager *wm,
-                          const WindowInfo *_window_info,
+                          const WindowInfo *window_info,
                           const WindowSpecification *_modifications);
 
 void handle_window_ready(WindowManager *wm, WindowInfo *window_info);
