@@ -122,6 +122,19 @@ void egmde::WindowManagerPolicy::handle_modify_window(WindowInfo& window_info, W
     rust::handle_modify_window(wm, &window_info, &modifications);
 }
 
+void egmde::WindowManagerPolicy::advise_output_create(Output const& output)
+{
+    rust::advise_output_create(wm, &output);
+}
+void egmde::WindowManagerPolicy::advise_output_update(Output const& updated, Output const& original)
+{
+    rust::advise_output_update(wm, &updated, &original);
+}
+void egmde::WindowManagerPolicy::advise_output_delete(Output const& output)
+{
+    rust::advise_output_delete(wm, &output);
+}
+
 extern "C" void* get_active_window(miral::WindowManagerTools* tools)
 {
     Window window = tools->active_window();

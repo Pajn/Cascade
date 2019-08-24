@@ -22,6 +22,12 @@ impl IdGenerator {
 }
 
 #[derive(Debug)]
+pub struct Size {
+  pub width: i32,
+  pub height: i32,
+}
+
+#[derive(Debug)]
 pub struct Window {
   pub id: Id,
   pub workspace: Id,
@@ -57,6 +63,15 @@ impl Window {
     unsafe { (*(*self.window_info).window()).size().height.value }
   }
 
+  pub fn max_height(&self) -> i32 {
+    unsafe { ((*self.window_info).max_height()).value }
+  }
+
+  pub fn resize(&mut self, width: i32, height: i32) {
+    let size = mir::geometry::Size::new(width, height);
+    unsafe { (*(*self.window_info).window()).resize(&size) }
+  }
+
   pub fn move_to(&mut self, x: i32, y: i32) {
     unsafe { (*(*self.window_info).window()).move_to(mir::geometry::Point::new(x, y)) }
   }
@@ -82,6 +97,7 @@ impl Window {
 #[derive(Debug)]
 pub struct Workspace {
   pub id: Id,
+  pub on_monitor: Option<Id>,
   pub windows: Vec<Id>,
 }
 
@@ -89,6 +105,7 @@ impl Workspace {
   pub fn new(id_generator: &mut IdGenerator) -> Workspace {
     Workspace {
       id: id_generator.next_id(),
+      on_monitor: None,
       windows: vec![],
     }
   }
@@ -122,11 +139,37 @@ impl Workspace {
 }
 
 #[derive(Debug)]
+pub struct Monitor {
+  pub id: Id,
+  pub size: Size,
+  pub workspace: Id,
+  pub output: *const miral::Output,
+}
+
+impl Monitor {
+  pub fn new(
+    id_generator: &mut IdGenerator,
+    size: Size,
+    workspace: Id,
+    output: *const miral::Output,
+  ) -> Monitor {
+    Monitor {
+      id: id_generator.next_id(),
+      size,
+      workspace,
+      output,
+    }
+  }
+}
+
+#[derive(Debug)]
 pub struct WindowManager {
   pub tools: *mut miral::WindowManagerTools,
+  pub monitor_id_generator: IdGenerator,
   pub window_id_generator: IdGenerator,
   pub workspace_id_generator: IdGenerator,
 
+  pub monitors: BTreeMap<Id, Monitor>,
   pub windows: BTreeMap<Id, Window>,
   pub workspaces: BTreeMap<Id, Workspace>,
   pub active_window: Option<Id>,
@@ -150,6 +193,21 @@ impl WindowManager {
       .expect("Workspace with id {} not found")
   }
 
+  pub fn monitor_by_workspace(&self, workspace_id: Id) -> Option<&Monitor> {
+    self
+      .get_workspace(workspace_id)
+      .on_monitor
+      .and_then(|monitor_id| self.monitors.get(&monitor_id))
+  }
+
+  pub fn monitor_by_window(&self, window_id: Id) -> Option<&Monitor> {
+    let workspace_id = self.get_window(window_id).workspace;
+    self
+      .get_workspace(workspace_id)
+      .on_monitor
+      .and_then(|monitor_id| self.monitors.get(&monitor_id))
+  }
+
   pub fn window_by_info(&self, window_info: *const miral::WindowInfo) -> Option<&Window> {
     self
       .windows
@@ -162,6 +220,41 @@ impl WindowManager {
       .workspaces
       .get(&self.active_workspace)
       .expect("Active workspace not found")
+  }
+
+  pub fn get_or_create_unused_workspace(&mut self) -> Id {
+    let unused_workspaces = self
+      .workspaces
+      .values()
+      .filter(|w| w.on_monitor == None)
+      .collect::<Vec<_>>();
+
+    match unused_workspaces.first() {
+      Option::None => {
+        let first_workspace = Workspace::new(&mut self.workspace_id_generator);
+        let first_workspace_id = first_workspace.id;
+        self.workspaces.insert(first_workspace.id, first_workspace);
+        let second_workspace = Workspace::new(&mut self.workspace_id_generator);
+        self
+          .workspaces
+          .insert(second_workspace.id, second_workspace);
+
+        first_workspace_id
+      }
+      Some(first_workspace) => {
+        let first_workspace_id = first_workspace.id;
+
+        // We want there to always be an additional workspace avalible
+        if unused_workspaces.len() == 1 {
+          let aditional_workspace = Workspace::new(&mut self.workspace_id_generator);
+          self
+            .workspaces
+            .insert(aditional_workspace.id, aditional_workspace);
+        }
+
+        first_workspace_id
+      }
+    }
   }
 
   pub fn add_window(&mut self, window: Window) -> () {

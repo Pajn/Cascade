@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <new>
+#include <miral/output.h>
 #include <miral/window_specification.h>
 #include <mir_toolkit/events/event.h>
 #include <mir_toolkit/events/input/input_event.h>
@@ -15,13 +16,7 @@
 
 namespace rust {
 
-struct Window;
-
 struct WindowManager;
-
-struct SharedPtrWindow {
-  Window *0;
-};
 
 extern "C" {
 
@@ -29,7 +24,11 @@ void advise_delete_window(WindowManager *wm, const WindowInfo *window_info);
 
 void advise_focus_gained(WindowManager *wm, const WindowInfo *window_info);
 
-extern SharedPtrWindow get_active_window(const WindowManagerTools *value);
+void advise_output_create(WindowManager *wm, const Output *output);
+
+void advise_output_delete(WindowManager *wm, const Output *output);
+
+void advise_output_update(WindowManager *wm, const Output *updated, const Output *original);
 
 bool handle_keyboard_event(WindowManager *wm, const MirKeyboardEvent *event);
 
@@ -42,12 +41,6 @@ void handle_window_ready(WindowManager *wm, WindowInfo *window_info);
 WindowManager *init_wm(WindowManagerTools *tools);
 
 void place_new_window(WindowManager *wm, WindowSpecification *window_specification);
-
-extern void rust_drop_window(SharedPtrWindow value);
-
-extern Window *rust_get_window(SharedPtrWindow value);
-
-extern void select_active_window(const WindowManagerTools *value, const Window *hont);
 
 } // extern "C"
 

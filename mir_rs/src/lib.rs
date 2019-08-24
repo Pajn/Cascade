@@ -36,7 +36,16 @@ impl mir::geometry::Point {
   }
 }
 
-pub mod InputEventModifier {
+impl mir::geometry::Size {
+  pub fn new(width: i32, height: i32) -> mir::geometry::Size {
+    mir::geometry::Size {
+      width: mir::geometry::detail::IntWrapper { value: width },
+      height: mir::geometry::detail::IntWrapper { value: height },
+    }
+  }
+}
+
+pub mod input_event_modifier {
   use crate::ffi;
 
   pub type Type = ffi::root::MirInputEventModifier::Type;
@@ -72,6 +81,6 @@ pub fn keyboard_event_key_code(event: *const ffi::root::MirKeyboardEvent) -> xkb
 
 pub fn keyboard_event_modifiers(
   event: *const ffi::root::MirKeyboardEvent,
-) -> InputEventModifier::Type {
+) -> input_event_modifier::Type {
   unsafe { ffi::root::mir_keyboard_event_modifiers(event) }
 }

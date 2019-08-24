@@ -44,6 +44,10 @@ public:
     void advise_delete_window(WindowInfo const& window_info) override;
     void handle_modify_window(WindowInfo& window_info, WindowSpecification const& modifications) override;
 
+    void advise_output_create(Output const& output) override;
+    void advise_output_update(Output const& updated, Output const& original) override;
+    void advise_output_delete(Output const& output) override;
+
 private:
     rust::WindowManager* wm;
     std::shared_ptr<miral::WindowManagerTools> tools;

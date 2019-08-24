@@ -33,23 +33,17 @@ fn is_tiled(window: &miral::WindowSpecification) -> bool {
 pub extern "C" fn init_wm(tools: *mut miral::WindowManagerTools) -> *mut WindowManager {
   let mut wm = WindowManager {
     tools,
+    monitor_id_generator: IdGenerator::new(),
     window_id_generator: IdGenerator::new(),
     workspace_id_generator: IdGenerator::new(),
+    monitors: BTreeMap::new(),
     windows: BTreeMap::new(),
     workspaces: BTreeMap::new(),
     active_window: None,
     active_workspace: 0,
   };
 
-  let first_workspace_id = wm.workspace_id_generator.next_id();
-  wm.active_workspace = first_workspace_id;
-  wm.workspaces.insert(
-    first_workspace_id,
-    Workspace {
-      id: first_workspace_id,
-      windows: vec![],
-    },
-  );
+  wm.active_workspace = wm.get_or_create_unused_workspace();
 
   unsafe { transmute(Box::new(wm)) }
 }
@@ -69,6 +63,12 @@ pub extern "C" fn place_new_window(
         .and_then(|id| wm.windows.get(&id))
         .map_or(0, |window| window.x() + window.width());
       point.y.value = 0;
+    }
+
+    if let Some(mut size) = unsafe { &mut *window_specification.size1() }.as_mut() {
+      if let Some(monitor) = wm.monitor_by_workspace(wm.active_workspace) {
+        size.height.value = monitor.size.height;
+      }
     }
   }
 }
@@ -102,6 +102,7 @@ pub extern "C" fn advise_focus_gained(
 
   if let Some(window_id) = wm.window_by_info(window_info).map(|w| w.id) {
     wm.active_window = Some(window_id);
+    wm.active_workspace = wm.get_window(window_id).workspace;
   }
 }
 
@@ -131,6 +132,64 @@ pub extern "C" fn advise_delete_window(
   wm.delete_window(window_id);
 
   println!("advise_delete_window {:?}", &wm);
+}
+
+#[no_mangle]
+pub extern "C" fn advise_output_create(wm: *mut WindowManager, output: *const miral::Output) -> () {
+  let wm = unsafe { &mut *wm };
+  let output = unsafe { &*output };
+
+  let size = Size {
+    width: unsafe { output.extents().size.width.value },
+    height: unsafe { output.extents().size.height.value },
+  };
+
+  let workspace = wm.get_or_create_unused_workspace();
+  let monitor = Monitor::new(&mut wm.monitor_id_generator, size, workspace, output);
+  wm.workspaces.get_mut(&workspace).unwrap().on_monitor = Some(monitor.id);
+  wm.monitors.insert(monitor.id, monitor);
+}
+
+#[no_mangle]
+pub extern "C" fn advise_output_update(
+  wm: *mut WindowManager,
+  updated: *const miral::Output,
+  original: *const miral::Output,
+) -> () {
+  let wm = unsafe { &mut *wm };
+  let updated = unsafe { &*updated };
+
+  let new_size = Size {
+    width: unsafe { updated.extents().size.width.value },
+    height: unsafe { updated.extents().size.height.value },
+  };
+
+  let mut monitor = wm
+    .monitors
+    .iter_mut()
+    .find(|(_, m)| m.output == original)
+    .expect("monitor advise_output_update")
+    .1;
+  monitor.size = new_size;
+}
+
+#[no_mangle]
+pub extern "C" fn advise_output_delete(wm: *mut WindowManager, output: *const miral::Output) -> () {
+  let wm = unsafe { &mut *wm };
+
+  let monitor = wm
+    .monitors
+    .iter_mut()
+    .find(|(_, m)| m.output == output)
+    .expect("monitor advise_output_delete")
+    .1;
+  let workspace = wm
+    .workspaces
+    .get_mut(&monitor.workspace)
+    .expect("workspacee advise_output_delete");
+  workspace.on_monitor = None;
+  let monitor_id = monitor.id;
+  wm.monitors.remove(&monitor_id);
 }
 
 #[no_mangle]

@@ -1,4 +1,5 @@
 use crate::entities::*;
+use std::cmp;
 
 pub fn arange_windows(wm: &mut WindowManager) -> () {
   let positions = wm
@@ -24,12 +25,31 @@ pub fn arange_windows(wm: &mut WindowManager) -> () {
     .collect::<Vec<_>>();
 
   for (window_id, x) in positions {
-    let window = wm.windows.get_mut(&window_id).unwrap();
+    let monitor = wm.monitor_by_window(window_id);
+    let window = wm.get_window(window_id);
 
     let old_x = window.x();
+    let old_y = window.y();
+    let old_height = window.height();
 
-    if old_x != x {
-      window.move_to(x, window.y());
+    let height = match monitor {
+      Some(monitor) => cmp::min(monitor.size.height, window.max_height()),
+      None => old_height,
+    };
+
+    let y = match monitor {
+      Some(monitor) => (monitor.size.height - height) / 2,
+      None => old_y,
+    };
+
+    if old_height != height {
+      let window = wm.windows.get_mut(&window_id).unwrap();
+      window.resize(window.width(), height);
+    }
+
+    if old_x != x || old_y != y {
+      let window = wm.windows.get_mut(&window_id).unwrap();
+      window.move_to(x, y);
     }
   }
 }
