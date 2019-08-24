@@ -118,8 +118,10 @@ void egmde::WindowManagerPolicy::advise_delete_window(WindowInfo const& window_i
 }
 void egmde::WindowManagerPolicy::handle_modify_window(WindowInfo& window_info, WindowSpecification const& modifications)
 {
-    MinimalWindowManager::handle_modify_window(window_info, modifications);
-    rust::handle_modify_window(wm, &window_info, &modifications);
+    auto specification = modifications;
+    rust::pre_handle_modify_window(wm, &window_info, &specification);
+    MinimalWindowManager::handle_modify_window(window_info, specification);
+    rust::post_handle_modify_window(wm, &window_info, &specification);
 }
 
 void egmde::WindowManagerPolicy::advise_output_create(Output const& output)
@@ -135,6 +137,10 @@ void egmde::WindowManagerPolicy::advise_output_delete(Output const& output)
     rust::advise_output_delete(wm, &output);
 }
 
+extern "C" bool window_specification_has_parent(miral::WindowSpecification& specification)
+{
+    return specification.parent().is_set() && specification.parent().value().lock();
+}
 extern "C" bool window_info_has_parent(miral::WindowInfo& window_info)
 {
     return !!window_info.parent();

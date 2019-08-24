@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 use std::mem::transmute;
 
 fn is_tiled(window: &miral::WindowSpecification) -> bool {
-  let parent = unsafe { (*(*window).parent()).as_ref() };
+  let has_parent = unsafe { window_specification_has_parent(window) };
   let type_ = unsafe {
     (*(*window).type_())
       .as_ref()
@@ -26,12 +26,7 @@ fn is_tiled(window: &miral::WindowSpecification) -> bool {
       .unwrap_or(raw::MirWindowState::mir_window_state_unknown)
   };
 
-  println!(
-    "is_tiled_raw parent: {:?}, type: {:?}, state: {:?}",
-    parent, type_, state
-  );
-
-  parent.is_none()
+  !has_parent
     && (type_ == raw::MirWindowType::mir_window_type_normal
       || type_ == raw::MirWindowType::mir_window_type_freestyle)
     && state != raw::MirWindowState::mir_window_state_fullscreen
@@ -134,7 +129,23 @@ pub extern "C" fn advise_focus_gained(
 }
 
 #[no_mangle]
-pub extern "C" fn handle_modify_window(
+pub extern "C" fn pre_handle_modify_window(
+  _wm: *mut WindowManager,
+  window_info: *const miral::WindowInfo,
+  modifications: *mut miral::WindowSpecification,
+) -> () {
+  let window_info = unsafe { &*window_info };
+  let modifications = unsafe { &mut *modifications };
+
+  if let Some(state) = unsafe { (*modifications.state()).as_ref() } {
+    if *state == raw::MirWindowState::mir_window_state_maximized {
+      unsafe { (*modifications.state1()).value_ = window_info.state() };
+    }
+  }
+}
+
+#[no_mangle]
+pub extern "C" fn post_handle_modify_window(
   wm: *mut WindowManager,
   window_info: *const miral::WindowInfo,
   _modifications: *const miral::WindowSpecification,
