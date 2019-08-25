@@ -22,21 +22,6 @@ impl IdGenerator {
   }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct Size {
-  pub width: i32,
-  pub height: i32,
-}
-
-impl Size {
-  pub fn width(&self, width: i32) -> Size {
-    Size {
-      width,
-      height: self.height,
-    }
-  }
-}
-
 #[derive(Debug)]
 pub struct Window {
   pub id: Id,
@@ -115,7 +100,7 @@ impl Window {
 
   pub fn resize(&mut self, size: Size) {
     self.set_size(size);
-    let size = mir::geometry::Size::new(self.size.width, self.size.height);
+    let size = size.into();
     unsafe { (*(*self.window_info).window()).resize(&size) }
   }
 
@@ -138,6 +123,7 @@ impl Window {
         && ((*self.window_info).type_() == raw::MirWindowType::mir_window_type_normal
           || (*self.window_info).type_() == raw::MirWindowType::mir_window_type_freestyle)
         && (*self.window_info).state() != raw::MirWindowState::mir_window_state_fullscreen
+        && (*self.window_info).state() != raw::MirWindowState::mir_window_state_attached
     }
   }
 
@@ -198,6 +184,7 @@ pub struct Monitor {
   pub size: Size,
   pub workspace: Id,
   pub output: *const miral::Output,
+  pub application_zone: Rectangle,
 }
 
 impl Monitor {
@@ -212,6 +199,10 @@ impl Monitor {
       size,
       workspace,
       output,
+      application_zone: Rectangle {
+        top_left: Point { x: 0, y: 0 },
+        size,
+      },
     }
   }
 }

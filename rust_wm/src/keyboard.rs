@@ -52,13 +52,13 @@ pub fn handle_key_press(
 
           let window = wm.windows.get_mut(&active_window).unwrap();
           if window_width < monitor_width / 3 {
-            window.set_size(window.size.width(monitor_width / 3));
+            window.set_size(window.size.with_width(monitor_width / 3));
           } else if window_width < monitor_width / 2 {
-            window.set_size(window.size.width(monitor_width / 2));
+            window.set_size(window.size.with_width(monitor_width / 2));
           } else if window_width < ((monitor_width / 3) * 2) {
-            window.set_size(window.size.width((monitor_width / 3) * 2));
+            window.set_size(window.size.with_width((monitor_width / 3) * 2));
           } else {
-            window.set_size(window.size.width(monitor_width / 3));
+            window.set_size(window.size.with_width(monitor_width / 3));
           }
           arrange_windows(wm);
         } else {
@@ -73,7 +73,7 @@ pub fn handle_key_press(
           let monitor_width = monitor.size.width;
 
           let window = wm.windows.get_mut(&active_window).unwrap();
-          window.set_size(window.size.width(monitor_width));
+          window.set_size(window.size.with_width(monitor_width));
           arrange_windows(wm);
         } else {
           println!("Active window not on a monitor?");

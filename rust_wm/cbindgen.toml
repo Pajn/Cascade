@@ -20,11 +20,12 @@ include_version = false
 namespace = "rust"
 namespaces = []
 sys_includes = [
-  "miral/output.h",
-  "miral/window_specification.h",
   "mir_toolkit/events/event.h",
   "mir_toolkit/events/input/input_event.h",
+  "miral/output.h",
+  "miral/window_management_policy.h",
   "miral/window_manager_tools.h",
+  "miral/window_specification.h",
 ]
 includes = ["fixes.h"]
 no_includes = false

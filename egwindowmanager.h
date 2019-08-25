@@ -20,6 +20,7 @@
 #define EGMDE_EGWINDOWMANAGER_H
 
 #include <miral/minimal_window_manager.h>
+#include <miral/window_management_policy.h>
 #include <miral/window_manager_tools.h>
 #include "rust_wm/rust_wm.h"
 
@@ -30,7 +31,8 @@ class Wallpaper;
 class Launcher;
 
 class WindowManagerPolicy :
-    public MinimalWindowManager
+    public MinimalWindowManager, 
+    public WindowManagementPolicy::ApplicationZoneAddendum
 {
 public:
     WindowManagerPolicy(WindowManagerTools const& tools, Wallpaper const& wallpaper, Launcher const& launcher);
@@ -47,6 +49,10 @@ public:
     void advise_output_create(Output const& output) override;
     void advise_output_update(Output const& updated, Output const& original) override;
     void advise_output_delete(Output const& output) override;
+    
+    void advise_application_zone_create(miral::Zone const& zone) override;
+    void advise_application_zone_update(miral::Zone const& updated, miral::Zone const& original) override;
+    void advise_application_zone_delete(miral::Zone const& zone) override;
 
 private:
     rust::WindowManager* wm;

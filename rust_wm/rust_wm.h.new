@@ -7,11 +7,12 @@
 #include <cstdint>
 #include <cstdlib>
 #include <new>
-#include <miral/output.h>
-#include <miral/window_specification.h>
 #include <mir_toolkit/events/event.h>
 #include <mir_toolkit/events/input/input_event.h>
+#include <miral/output.h>
+#include <miral/window_management_policy.h>
 #include <miral/window_manager_tools.h>
+#include <miral/window_specification.h>
 #include "fixes.h"
 
 namespace rust {
@@ -19,6 +20,12 @@ namespace rust {
 struct WindowManager;
 
 extern "C" {
+
+void advise_application_zone_create(WindowManager *wm, const Zone *zone);
+
+void advise_application_zone_delete(WindowManager *wm, const Zone *_zone);
+
+void advise_application_zone_update(WindowManager *wm, const Zone *updated, const Zone *_original);
 
 void advise_delete_window(WindowManager *wm, const WindowInfo *window_info);
 
@@ -32,15 +39,21 @@ void advise_output_update(WindowManager *wm, const Output *updated, const Output
 
 bool handle_keyboard_event(WindowManager *wm, const MirKeyboardEvent *event);
 
-void handle_modify_window(WindowManager *wm,
-                          const WindowInfo *window_info,
-                          const WindowSpecification *_modifications);
-
 void handle_window_ready(WindowManager *wm, WindowInfo *window_info);
 
 WindowManager *init_wm(WindowManagerTools *tools);
 
 void place_new_window(WindowManager *wm, WindowSpecification *window_specification);
+
+void post_handle_modify_window(WindowManager *wm,
+                               const WindowInfo *window_info,
+                               const WindowSpecification *_modifications);
+
+void pre_handle_modify_window(WindowManager *_wm,
+                              const WindowInfo *window_info,
+                              WindowSpecification *modifications);
+
+extern bool window_specification_has_parent(const WindowSpecification *window_info);
 
 } // extern "C"
 

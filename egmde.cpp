@@ -115,7 +115,9 @@ int main(int argc, char const* argv[])
     return runner.run_with(
         {
             X11Support{},
-            WaylandExtensions{},
+            WaylandExtensions{}
+                .enable(WaylandExtensions::zwlr_layer_shell_v1)
+                .enable(WaylandExtensions::zxdg_output_manager_v1),
             DisplayConfiguration{runner},
             CommandLineOption{[&](auto& option) { wallpaper.top(option);},
                               "wallpaper-top",    "Colour of wallpaper RGB", "0x000000"},

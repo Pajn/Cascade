@@ -30,6 +30,7 @@ fn is_tiled(window: &miral::WindowSpecification) -> bool {
     && (type_ == raw::MirWindowType::mir_window_type_normal
       || type_ == raw::MirWindowType::mir_window_type_freestyle)
     && state != raw::MirWindowState::mir_window_state_fullscreen
+    && state != raw::MirWindowState::mir_window_state_attached
 }
 
 #[no_mangle]
@@ -169,12 +170,15 @@ pub extern "C" fn advise_delete_window(
 ) -> () {
   let wm = unsafe { &mut *wm };
 
-  let window_id = wm
-    .window_by_info(window_info)
-    .expect("nowindow in windows advise_delete_window")
-    .id;
-
-  wm.delete_window(window_id);
+  if let Some(window) = wm.window_by_info(window_info) {
+    let window_id = window.id;
+    wm.delete_window(window_id);
+  } else {
+    println!(
+      "nowindow in windows advise_delete_window, info: {:?}",
+      window_info
+    );
+  }
 
   println!("advise_delete_window {:?}", &wm);
 }
@@ -236,6 +240,74 @@ pub extern "C" fn advise_output_delete(wm: *mut WindowManager, output: *const mi
   workspace.on_monitor = None;
   let monitor_id = monitor.id;
   wm.monitors.remove(&monitor_id);
+}
+
+#[no_mangle]
+pub extern "C" fn advise_application_zone_create(
+  wm: *mut WindowManager,
+  zone: *const miral::Zone,
+) -> () {
+  let wm = unsafe { &mut *wm };
+  let zone = unsafe { &*zone };
+
+  unsafe {
+    println!(
+      "advise_application_zone_create, top: {}, left: {}, right: {}, bottom: {}",
+      zone.extents().top_left.y.value,
+      zone.extents().top_left.x.value,
+      zone.extents().bottom_right().x.value,
+      zone.extents().bottom_right().y.value
+    );
+  }
+
+  // TODO: Handle multiple monitors
+  for monitor in wm.monitors.values_mut() {
+    monitor.application_zone = unsafe { zone.extents().into() };
+  }
+}
+
+#[no_mangle]
+pub extern "C" fn advise_application_zone_update(
+  wm: *mut WindowManager,
+  updated: *const miral::Zone,
+  _original: *const miral::Zone,
+) -> () {
+  let wm = unsafe { &mut *wm };
+  let updated = unsafe { &*updated };
+
+  unsafe {
+    println!(
+      "advise_application_zone_update, top: {}, left: {}, right: {}, bottom: {}",
+      updated.extents().top_left.y.value,
+      updated.extents().top_left.x.value,
+      updated.extents().bottom_right().x.value,
+      updated.extents().bottom_right().y.value
+    );
+  }
+
+  // TODO: Handle multiple monitors
+  for monitor in wm.monitors.values_mut() {
+    monitor.application_zone = unsafe { updated.extents().into() };
+  }
+}
+
+#[no_mangle]
+pub extern "C" fn advise_application_zone_delete(
+  wm: *mut WindowManager,
+  _zone: *const miral::Zone,
+) -> () {
+  let mut wm = unsafe { &mut *wm };
+  println!("advise_application_zone_delete");
+
+  // TODO: Handle multiple monitors
+  for monitor in wm.monitors.values_mut() {
+    monitor.application_zone = Rectangle {
+      top_left: Point { x: 0, y: 0 },
+      size: monitor.size,
+    };
+  }
+
+  arrange_windows(&mut wm);
 }
 
 #[no_mangle]

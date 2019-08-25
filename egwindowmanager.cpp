@@ -124,6 +124,19 @@ void egmde::WindowManagerPolicy::handle_modify_window(WindowInfo& window_info, W
     rust::post_handle_modify_window(wm, &window_info, &specification);
 }
 
+void egmde::WindowManagerPolicy::advise_application_zone_create(miral::Zone const& zone)
+{
+    rust::advise_application_zone_create(wm, &zone);
+}
+void egmde::WindowManagerPolicy::advise_application_zone_update(miral::Zone const& updated, miral::Zone const& original)
+{
+    rust::advise_application_zone_update(wm, &updated, &original);
+}
+void egmde::WindowManagerPolicy::advise_application_zone_delete(miral::Zone const& zone)
+{
+    rust::advise_application_zone_delete(wm, &zone);
+}
+
 void egmde::WindowManagerPolicy::advise_output_create(Output const& output)
 {
     rust::advise_output_create(wm, &output);

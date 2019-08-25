@@ -36,11 +36,150 @@ impl mir::geometry::Point {
   }
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub struct Point {
+  pub x: i32,
+  pub y: i32,
+}
+
+impl Point {
+  pub fn x(&self) -> i32 {
+    self.x
+  }
+
+  pub fn y(&self) -> i32 {
+    self.y
+  }
+}
+
+impl From<mir::geometry::Point> for Point {
+  fn from(point: mir::geometry::Point) -> Point {
+    Point {
+      x: point.x.value,
+      y: point.y.value,
+    }
+  }
+}
+
+impl From<Point> for mir::geometry::Point {
+  fn from(point: Point) -> mir::geometry::Point {
+    mir::geometry::Point {
+      x: mir::geometry::detail::IntWrapper { value: point.x },
+      y: mir::geometry::detail::IntWrapper { value: point.y },
+    }
+  }
+}
+
 impl mir::geometry::Size {
   pub fn new(width: i32, height: i32) -> mir::geometry::Size {
     mir::geometry::Size {
       width: mir::geometry::detail::IntWrapper { value: width },
       height: mir::geometry::detail::IntWrapper { value: height },
+    }
+  }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub struct Size {
+  pub width: i32,
+  pub height: i32,
+}
+
+impl Size {
+  pub fn width(&self) -> i32 {
+    self.width
+  }
+
+  pub fn height(&self) -> i32 {
+    self.height
+  }
+
+  pub fn with_width(&self, width: i32) -> Size {
+    Size {
+      width,
+      height: self.height,
+    }
+  }
+
+  pub fn with_height(&self, height: i32) -> Size {
+    Size {
+      width: self.width,
+      height,
+    }
+  }
+}
+
+impl From<mir::geometry::Size> for Size {
+  fn from(size: mir::geometry::Size) -> Size {
+    Size {
+      width: size.width.value,
+      height: size.height.value,
+    }
+  }
+}
+
+impl From<Size> for mir::geometry::Size {
+  fn from(size: Size) -> mir::geometry::Size {
+    mir::geometry::Size {
+      width: mir::geometry::detail::IntWrapper { value: size.width },
+      height: mir::geometry::detail::IntWrapper { value: size.height },
+    }
+  }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Rectangle {
+  pub top_left: Point,
+  pub size: Size,
+}
+
+impl Rectangle {
+  pub fn left(&self) -> i32 {
+    self.top_left.x
+  }
+
+  pub fn top(&self) -> i32 {
+    self.top_left.y
+  }
+
+  pub fn right(&self) -> i32 {
+    self.bottom_right_safe().x
+  }
+
+  pub fn bottom(&self) -> i32 {
+    self.bottom_right_safe().y
+  }
+
+  pub fn width(&self) -> i32 {
+    self.size.width
+  }
+
+  pub fn height(&self) -> i32 {
+    self.size.height
+  }
+
+  pub fn bottom_right_safe(&self) -> Point {
+    Point {
+      x: self.left() + self.width(),
+      y: self.top() + self.height(),
+    }
+  }
+}
+
+impl From<mir::geometry::Rectangle> for Rectangle {
+  fn from(rectangle: mir::geometry::Rectangle) -> Rectangle {
+    Rectangle {
+      top_left: rectangle.top_left.into(),
+      size: rectangle.size.into(),
+    }
+  }
+}
+
+impl From<Rectangle> for mir::geometry::Rectangle {
+  fn from(rectangle: Rectangle) -> mir::geometry::Rectangle {
+    mir::geometry::Rectangle {
+      top_left: rectangle.top_left.into(),
+      size: rectangle.size.into(),
     }
   }
 }
