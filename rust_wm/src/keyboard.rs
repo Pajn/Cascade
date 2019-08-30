@@ -44,6 +44,36 @@ pub fn handle_key_press(
       move_window(wm, Direction::Right);
       true
     }
+    xkb::KEY_Left
+      if modifiers == input_event_modifier::META_LEFT | input_event_modifier::SHIFT_LEFT =>
+    {
+      naviate_monitor(wm, Direction::Left);
+      true
+    }
+    xkb::KEY_Right
+      if modifiers == input_event_modifier::META_LEFT | input_event_modifier::SHIFT_LEFT =>
+    {
+      naviate_monitor(wm, Direction::Right);
+      true
+    }
+    xkb::KEY_Left
+      if modifiers
+        == input_event_modifier::META_LEFT
+          | input_event_modifier::CTRL_LEFT
+          | input_event_modifier::SHIFT_LEFT =>
+    {
+      move_window_monitor(wm, Direction::Left);
+      true
+    }
+    xkb::KEY_Right
+      if modifiers
+        == input_event_modifier::META_LEFT
+          | input_event_modifier::CTRL_LEFT
+          | input_event_modifier::SHIFT_LEFT =>
+    {
+      move_window_monitor(wm, Direction::Right);
+      true
+    }
     xkb::KEY_r if modifiers == input_event_modifier::META_LEFT => {
       if let Some(active_window) = wm.active_window {
         if let Some(monitor) = wm.monitor_by_window(active_window) {
@@ -84,16 +114,20 @@ pub fn handle_key_press(
     xkb::KEY_c if modifiers == input_event_modifier::META_LEFT => {
       if let Some(active_window) = wm.active_window {
         if let Some(monitor) = wm.monitor_by_window(active_window) {
+          let monitor_left = monitor.extents.left();
           let monitor_width = monitor.extents.width();
           let window = wm.get_window(active_window);
-          let worksapce_id = window.workspace;
 
-          let scroll_left = window.x - monitor_width / 2 + window.size.width / 2;
+          if window.is_tiled() {
+            let worksapce_id = window.workspace;
 
-          let workspace = wm.workspaces.get_mut(&worksapce_id).unwrap();
-          workspace.scroll_left = scroll_left;
+            let scroll_left = window.x - monitor_left - monitor_width / 2 + window.size.width / 2;
 
-          arrange_windows(wm);
+            let workspace = wm.workspaces.get_mut(&worksapce_id).unwrap();
+            workspace.scroll_left = scroll_left;
+
+            arrange_windows(wm);
+          }
         } else {
           println!("Active window not on a monitor?");
         }

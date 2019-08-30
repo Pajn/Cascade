@@ -1,5 +1,6 @@
 use crate::entities::*;
 use std::cmp;
+use std::cmp::Ordering;
 
 fn update_cached_positions(wm: &mut WindowManager, workspace_id: Id) -> () {
   let monitor = wm.monitor_by_workspace(workspace_id);
@@ -57,7 +58,7 @@ pub fn ensure_window_visible(wm: &mut WindowManager, window_id: Id) -> () {
     let x_window_left = window_x;
     let x_window_right = window_x + window_width;
 
-    let x_workspace_left = workspace.scroll_left;
+    let x_workspace_left = workspace.scroll_left + extents_left;
     let x_workspace_right = workspace.scroll_left + extents_right;
 
     if x_window_left < x_workspace_left {
@@ -141,10 +142,10 @@ pub fn naviate(wm: &mut WindowManager, direction: Direction) {
         Direction::Left => index - 1,
         Direction::Right => index + 1,
       };
-      if index >= 0 {
-        if let Some(window_id) = tiled_windows.get(index as usize) {
-          wm.focus_window(*window_id);
-        }
+      if index < 0 || index > tiled_windows.len() as isize - 1 {
+        naviate_monitor(wm, direction);
+      } else if let Some(window_id) = tiled_windows.get(index as usize) {
+        wm.focus_window(*window_id);
       }
     }
   } else {
@@ -170,18 +171,112 @@ pub fn move_window(wm: &mut WindowManager, direction: Direction) {
         Direction::Left => tiled_index - 1,
         Direction::Right => tiled_index + 1,
       };
-      if tiled_index >= 0 {
-        if let Some(new_raw_index) = tiled_windows
-          .get(tiled_index as usize)
-          .and_then(|id| workspace.get_window_index(*id))
-        {
-          wm.workspaces
-            .get_mut(&wm.active_workspace)
-            .expect("move window active workspace")
-            .windows
-            .swap(raw_index, new_raw_index);
-          arrange_windows(wm);
+      if tiled_index < 0 || tiled_index > tiled_windows.len() as isize - 1 {
+        move_window_monitor(wm, direction);
+      } else if let Some(new_raw_index) = tiled_windows
+        .get(tiled_index as usize)
+        .and_then(|id| workspace.get_window_index(*id))
+      {
+        wm.workspaces
+          .get_mut(&wm.active_workspace)
+          .expect("move window active workspace")
+          .windows
+          .swap(raw_index, new_raw_index);
+        arrange_windows(wm);
+      }
+    }
+  }
+}
+
+pub fn monitor_x_position(a: &&Monitor, b: &&Monitor) -> Ordering {
+  a.extents.left().cmp(&b.extents.left())
+}
+
+pub fn naviate_monitor(wm: &mut WindowManager, direction: Direction) {
+  if let Some(current_monitor) = wm.active_workspace().on_monitor {
+    let mut monitors = wm.monitors.values().collect::<Vec<_>>();
+    monitors.sort_by(monitor_x_position);
+
+    let index = monitors
+      .iter()
+      .enumerate()
+      .find(|(_, m)| m.id == current_monitor)
+      .map(|(index, _)| index)
+      .expect("current_monitor not found") as isize;
+
+    let index = match direction {
+      Direction::Left => index - 1,
+      Direction::Right => index + 1,
+    };
+
+    if index >= 0 {
+      if let Some(monitor) = monitors.get(index as usize) {
+        wm.active_workspace = monitor.workspace;
+        let window = match direction {
+          Direction::Left => wm.get_workspace(monitor.workspace).windows.last(),
+          Direction::Right => wm.get_workspace(monitor.workspace).windows.first(),
+        };
+        if let Some(window_id) = window.cloned() {
+          wm.active_window = Some(window_id);
+          wm.focus_window(window_id);
+        } else {
+          wm.active_window = None;
         }
+      }
+    }
+  } else {
+    // TODO: This should not happen
+    println!("Active workspace was not on any monitor")
+  }
+}
+
+pub fn move_window_monitor(wm: &mut WindowManager, direction: Direction) {
+  if let Some(active_window) = wm.active_window {
+    let window = wm.get_window(active_window);
+    if window.is_tiled() {
+      let from_workspace = wm.get_workspace(window.workspace);
+      let from_workspace_id = from_workspace.id;
+      if let Some(monitor) = from_workspace.on_monitor {
+        let mut monitors = wm.monitors.values().collect::<Vec<_>>();
+        monitors.sort_by(monitor_x_position);
+
+        let index = monitors
+          .iter()
+          .enumerate()
+          .find(|(_, m)| m.id == monitor)
+          .map(|(index, _)| index)
+          .expect("current_monitor not found") as isize;
+
+        let index = match direction {
+          Direction::Left => index - 1,
+          Direction::Right => index + 1,
+        };
+
+        if index >= 0 {
+          if let Some(monitor) = monitors.get(index as usize) {
+            let to_workspace = wm.workspaces.get_mut(&monitor.workspace).unwrap();
+
+            match direction {
+              Direction::Left => to_workspace.windows.push(active_window),
+              Direction::Right => to_workspace.windows.insert(0, active_window),
+            };
+            wm.active_workspace = to_workspace.id;
+
+            let from_workspace = wm.workspaces.get_mut(&from_workspace_id).unwrap();
+            let raw_index = from_workspace
+              .get_window_index(active_window)
+              .expect("Active window not found in active workspace");
+            from_workspace.windows.remove(raw_index);
+
+            let window = wm.windows.get_mut(&active_window).unwrap();
+            window.workspace = wm.active_workspace;
+
+            arrange_windows(wm);
+          }
+        }
+      } else {
+        // TODO: This should not happen
+        println!("Active window was on workspace that was not on any monitor")
       }
     }
   }

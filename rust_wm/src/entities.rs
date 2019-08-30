@@ -186,11 +186,7 @@ pub struct Monitor {
 }
 
 impl Monitor {
-  pub fn new(
-    id_generator: &mut IdGenerator,
-    extents: Rectangle,
-    workspace: Id,
-  ) -> Monitor {
+  pub fn new(id_generator: &mut IdGenerator, extents: Rectangle, workspace: Id) -> Monitor {
     Monitor {
       id: id_generator.next_id(),
       extents,
@@ -239,10 +235,7 @@ impl WindowManager {
 
   pub fn monitor_by_window(&self, window_id: Id) -> Option<&Monitor> {
     let workspace_id = self.get_window(window_id).workspace;
-    self
-      .get_workspace(workspace_id)
-      .on_monitor
-      .and_then(|monitor_id| self.monitors.get(&monitor_id))
+    self.monitor_by_workspace(workspace_id)
   }
 
   pub fn window_by_info(&self, window_info: *const miral::WindowInfo) -> Option<&Window> {

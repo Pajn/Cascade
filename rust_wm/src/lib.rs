@@ -274,10 +274,10 @@ pub extern "C" fn advise_application_zone_update(
   let updated = unsafe { (*updated).extents().into() };
   let original = unsafe { (*original).extents().into() };
 
-    println!(
-      "advise_application_zone_update, from {:?} to {:?}",
-      original, updated
-    );
+  println!(
+    "advise_application_zone_update, from {:?} to {:?}",
+    original, updated
+  );
 
   let mut monitor = wm
     .monitors
