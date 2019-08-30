@@ -149,37 +149,3 @@ void egmde::WindowManagerPolicy::advise_output_delete(Output const& output)
 {
     rust::advise_output_delete(wm, &output);
 }
-
-extern "C" bool window_specification_has_parent(miral::WindowSpecification& specification)
-{
-    return specification.parent().is_set() && specification.parent().value().lock();
-}
-extern "C" bool window_info_has_parent(miral::WindowInfo& window_info)
-{
-    return !!window_info.parent();
-}
-
-extern "C" void* get_active_window(miral::WindowManagerTools* tools)
-{
-    Window window = tools->active_window();
-    std::shared_ptr<Window> window_ptr = std::make_shared<Window>();
-    *window_ptr = window;
-    return static_cast<void*>(new std::shared_ptr<Window>(window_ptr));
-}
-
-extern "C" void select_active_window(miral::WindowManagerTools* tools, Window const* hint)
-{
-    printf("tools %p, hint: %p\n", (void*) tools, (void*) hint);
-    tools->select_active_window(*hint);
-}
-
-extern "C" Window* rust_get_window(std::shared_ptr<Window> window)
-{
-    return window.get();
-}
-
-extern "C" void rust_drop_window(void* ptr)
-{
-    std::shared_ptr<Window> *value = static_cast<std::shared_ptr<Window>*>(ptr);
-    delete value;
-}

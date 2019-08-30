@@ -22,6 +22,7 @@ add_executable(egmde
     egworker.cpp egworker.h
     printer.cpp printer.h
     egfullscreenclient.cpp egfullscreenclient.h
+    ffi_helpers.cpp
     rust_wm/rust_wm.h)
 
 execute_process(
