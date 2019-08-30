@@ -181,28 +181,20 @@ impl Workspace {
 #[derive(Debug)]
 pub struct Monitor {
   pub id: Id,
-  pub size: Size,
+  pub extents: Rectangle,
   pub workspace: Id,
-  pub output: *const miral::Output,
-  pub application_zone: Rectangle,
 }
 
 impl Monitor {
   pub fn new(
     id_generator: &mut IdGenerator,
-    size: Size,
+    extents: Rectangle,
     workspace: Id,
-    output: *const miral::Output,
   ) -> Monitor {
     Monitor {
       id: id_generator.next_id(),
-      size,
+      extents,
       workspace,
-      output,
-      application_zone: Rectangle {
-        top_left: Point { x: 0, y: 0 },
-        size,
-      },
     }
   }
 }

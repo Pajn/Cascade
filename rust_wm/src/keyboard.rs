@@ -47,7 +47,7 @@ pub fn handle_key_press(
     xkb::KEY_r if modifiers == input_event_modifier::META_LEFT => {
       if let Some(active_window) = wm.active_window {
         if let Some(monitor) = wm.monitor_by_window(active_window) {
-          let monitor_width = monitor.size.width;
+          let monitor_width = monitor.extents.width();
           let window_width = wm.get_window(active_window).size.width;
 
           let window = wm.windows.get_mut(&active_window).unwrap();
@@ -70,7 +70,7 @@ pub fn handle_key_press(
     xkb::KEY_f if modifiers == input_event_modifier::META_LEFT => {
       if let Some(active_window) = wm.active_window {
         if let Some(monitor) = wm.monitor_by_window(active_window) {
-          let monitor_width = monitor.size.width;
+          let monitor_width = monitor.extents.width();
 
           let window = wm.windows.get_mut(&active_window).unwrap();
           window.set_size(window.size.with_width(monitor_width));
@@ -84,7 +84,7 @@ pub fn handle_key_press(
     xkb::KEY_c if modifiers == input_event_modifier::META_LEFT => {
       if let Some(active_window) = wm.active_window {
         if let Some(monitor) = wm.monitor_by_window(active_window) {
-          let monitor_width = monitor.size.width;
+          let monitor_width = monitor.extents.width();
           let window = wm.get_window(active_window);
           let worksapce_id = window.workspace;
 

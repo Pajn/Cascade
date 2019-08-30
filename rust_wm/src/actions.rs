@@ -16,14 +16,11 @@ fn update_cached_positions(wm: &mut WindowManager, workspace_id: Id) -> () {
         None
       }
     })
-    .scan(
-      monitor.map_or(0, |m| m.application_zone.left()),
-      |next_x, window| {
-        let x = *next_x;
-        *next_x = x + window.size.width;
-        Some((window.id, x))
-      },
-    )
+    .scan(monitor.map_or(0, |m| m.extents.left()), |next_x, window| {
+      let x = *next_x;
+      *next_x = x + window.size.width;
+      Some((window.id, x))
+    })
     .collect::<Vec<_>>();
 
   for (window_id, x) in positions {
@@ -31,14 +28,12 @@ fn update_cached_positions(wm: &mut WindowManager, workspace_id: Id) -> () {
     let window = wm.get_window(window_id);
 
     let height = match monitor {
-      Some(monitor) => cmp::min(monitor.application_zone.height(), window.max_height()),
+      Some(monitor) => cmp::min(monitor.extents.height(), window.max_height()),
       None => window.height(),
     };
 
     let y = match monitor {
-      Some(monitor) => {
-        monitor.application_zone.top() + (monitor.application_zone.height() - height) / 2
-      }
+      Some(monitor) => monitor.extents.top() + (monitor.extents.height() - height) / 2,
       None => window.y(),
     };
 
@@ -52,8 +47,8 @@ fn update_cached_positions(wm: &mut WindowManager, workspace_id: Id) -> () {
 
 pub fn ensure_window_visible(wm: &mut WindowManager, window_id: Id) -> () {
   if let Some(monitor) = wm.monitor_by_window(window_id) {
-    let application_zone_left = monitor.application_zone.left();
-    let application_zone_right = monitor.application_zone.right();
+    let extents_left = monitor.extents.left();
+    let extents_right = monitor.extents.right();
     let window = wm.get_window(window_id);
     let window_x = window.x;
     let window_width = window.width();
@@ -63,12 +58,12 @@ pub fn ensure_window_visible(wm: &mut WindowManager, window_id: Id) -> () {
     let x_window_right = window_x + window_width;
 
     let x_workspace_left = workspace.scroll_left;
-    let x_workspace_right = workspace.scroll_left + application_zone_right;
+    let x_workspace_right = workspace.scroll_left + extents_right;
 
     if x_window_left < x_workspace_left {
-      workspace.scroll_left = x_window_left - application_zone_left;
+      workspace.scroll_left = x_window_left - extents_left;
     } else if x_window_right > x_workspace_right {
-      workspace.scroll_left = x_window_right - application_zone_right;
+      workspace.scroll_left = x_window_right - extents_right;
     }
   } else {
     println!(

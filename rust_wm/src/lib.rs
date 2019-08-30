@@ -72,7 +72,7 @@ pub extern "C" fn place_new_window(
 
     if let Some(mut size) = unsafe { &mut *window_specification.size1() }.as_mut() {
       if let Some(monitor) = wm.monitor_by_workspace(wm.active_workspace) {
-        size.height.value = monitor.size.height;
+        size.height.value = monitor.extents.height();
       }
     }
   } else {
@@ -184,62 +184,68 @@ pub extern "C" fn advise_delete_window(
 }
 
 #[no_mangle]
-pub extern "C" fn advise_output_create(wm: *mut WindowManager, output: *const miral::Output) -> () {
-  let wm = unsafe { &mut *wm };
-  let output = unsafe { &*output };
+pub extern "C" fn advise_output_create(
+  _wm: *mut WindowManager,
+  _output: *const miral::Output,
+) -> () {
+  // let wm = unsafe { &mut *wm };
+  // let output = unsafe { &*output };
 
-  let size = Size {
-    width: unsafe { output.extents().size.width.value },
-    height: unsafe { output.extents().size.height.value },
-  };
+  // let size = Size {
+  //   width: unsafe { output.extents().size.width.value },
+  //   height: unsafe { output.extents().size.height.value },
+  // };
 
-  let workspace = wm.get_or_create_unused_workspace();
-  let monitor = Monitor::new(&mut wm.monitor_id_generator, size, workspace, output);
-  wm.workspaces.get_mut(&workspace).unwrap().on_monitor = Some(monitor.id);
-  wm.monitors.insert(monitor.id, monitor);
+  // let workspace = wm.get_or_create_unused_workspace();
+  // let monitor = Monitor::new(&mut wm.monitor_id_generator, size, workspace, output);
+  // wm.workspaces.get_mut(&workspace).unwrap().on_monitor = Some(monitor.id);
+  // wm.monitors.insert(monitor.id, monitor);
 }
 
 #[no_mangle]
 pub extern "C" fn advise_output_update(
-  wm: *mut WindowManager,
-  updated: *const miral::Output,
-  original: *const miral::Output,
+  _wm: *mut WindowManager,
+  _updated: *const miral::Output,
+  _original: *const miral::Output,
 ) -> () {
-  let wm = unsafe { &mut *wm };
-  let updated = unsafe { &*updated };
+  // let wm = unsafe { &mut *wm };
+  // let updated = unsafe { &*updated };
 
-  let new_size = Size {
-    width: unsafe { updated.extents().size.width.value },
-    height: unsafe { updated.extents().size.height.value },
-  };
+  // let new_size = Size {
+  //   width: unsafe { updated.extents().size.width.value },
+  //   height: unsafe { updated.extents().size.height.value },
+  // };
 
-  let mut monitor = wm
-    .monitors
-    .iter_mut()
-    .find(|(_, m)| m.output == original)
-    .expect("monitor advise_output_update")
-    .1;
-  monitor.output = updated;
-  monitor.size = new_size;
+  // let mut monitor = wm
+  //   .monitors
+  //   .iter_mut()
+  //   .find(|(_, m)| m.output == original)
+  //   .expect("monitor advise_output_update")
+  //   .1;
+  // monitor.output = updated;
+  // monitor.size = new_size;
 }
 
 #[no_mangle]
-pub extern "C" fn advise_output_delete(wm: *mut WindowManager, output: *const miral::Output) -> () {
-  let wm = unsafe { &mut *wm };
+pub extern "C" fn advise_output_delete(
+  _wm: *mut WindowManager,
+  _output: *const miral::Output,
+) -> () {
+  // let wm = unsafe { &mut *wm };
 
-  let monitor = wm
-    .monitors
-    .iter_mut()
-    .find(|(_, m)| m.output == output)
-    .expect("monitor advise_output_delete")
-    .1;
-  let workspace = wm
-    .workspaces
-    .get_mut(&monitor.workspace)
-    .expect("workspacee advise_output_delete");
-  workspace.on_monitor = None;
-  let monitor_id = monitor.id;
-  wm.monitors.remove(&monitor_id);
+  // let monitor = wm
+  //   .monitors
+  //   .iter_mut()
+  //   .find(|(_, m)| m.output == output)
+  //   .expect("monitor advise_output_delete")
+  //   .1;
+  // let workspace = wm
+  //   .workspaces
+  //   .get_mut(&monitor.workspace)
+  //   .expect("workspacee advise_output_delete");
+  // workspace.on_monitor = None;
+  // let monitor_id = monitor.id;
+  // wm.monitors.remove(&monitor_id);
 }
 
 #[no_mangle]
@@ -248,64 +254,62 @@ pub extern "C" fn advise_application_zone_create(
   zone: *const miral::Zone,
 ) -> () {
   let wm = unsafe { &mut *wm };
-  let zone = unsafe { &*zone };
+  let zone = unsafe { (*zone).extents().into() };
 
-  unsafe {
-    println!(
-      "advise_application_zone_create, top: {}, left: {}, right: {}, bottom: {}",
-      zone.extents().top_left.y.value,
-      zone.extents().top_left.x.value,
-      zone.extents().bottom_right().x.value,
-      zone.extents().bottom_right().y.value
-    );
-  }
+  println!("advise_application_zone_create, {:?}", zone);
 
-  // TODO: Handle multiple monitors
-  for monitor in wm.monitors.values_mut() {
-    monitor.application_zone = unsafe { zone.extents().into() };
-  }
+  let workspace = wm.get_or_create_unused_workspace();
+  let monitor = Monitor::new(&mut wm.monitor_id_generator, zone, workspace);
+  wm.workspaces.get_mut(&workspace).unwrap().on_monitor = Some(monitor.id);
+  wm.monitors.insert(monitor.id, monitor);
 }
 
 #[no_mangle]
 pub extern "C" fn advise_application_zone_update(
   wm: *mut WindowManager,
   updated: *const miral::Zone,
-  _original: *const miral::Zone,
+  original: *const miral::Zone,
 ) -> () {
   let wm = unsafe { &mut *wm };
-  let updated = unsafe { &*updated };
+  let updated = unsafe { (*updated).extents().into() };
+  let original = unsafe { (*original).extents().into() };
 
-  unsafe {
     println!(
-      "advise_application_zone_update, top: {}, left: {}, right: {}, bottom: {}",
-      updated.extents().top_left.y.value,
-      updated.extents().top_left.x.value,
-      updated.extents().bottom_right().x.value,
-      updated.extents().bottom_right().y.value
+      "advise_application_zone_update, from {:?} to {:?}",
+      original, updated
     );
-  }
 
-  // TODO: Handle multiple monitors
-  for monitor in wm.monitors.values_mut() {
-    monitor.application_zone = unsafe { updated.extents().into() };
-  }
+  let mut monitor = wm
+    .monitors
+    .iter_mut()
+    .find(|(_, m)| m.extents == original)
+    .expect("monitor advise_application_zone_update")
+    .1;
+  monitor.extents = updated;
 }
 
 #[no_mangle]
 pub extern "C" fn advise_application_zone_delete(
   wm: *mut WindowManager,
-  _zone: *const miral::Zone,
+  zone: *const miral::Zone,
 ) -> () {
   let mut wm = unsafe { &mut *wm };
+  let zone = unsafe { (*zone).extents().into() };
   println!("advise_application_zone_delete");
 
-  // TODO: Handle multiple monitors
-  for monitor in wm.monitors.values_mut() {
-    monitor.application_zone = Rectangle {
-      top_left: Point { x: 0, y: 0 },
-      size: monitor.size,
-    };
-  }
+  let monitor = wm
+    .monitors
+    .iter_mut()
+    .find(|(_, m)| m.extents == zone)
+    .expect("monitor advise_application_zone_delete")
+    .1;
+  let workspace = wm
+    .workspaces
+    .get_mut(&monitor.workspace)
+    .expect("workspacee advise_application_zone_delete");
+  workspace.on_monitor = None;
+  let monitor_id = monitor.id;
+  wm.monitors.remove(&monitor_id);
 
   arrange_windows(&mut wm);
 }
