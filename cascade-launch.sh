@@ -1,15 +1,15 @@
 #! /bin/bash
 set -e
 
-socket=${XDG_RUNTIME_DIR}/egmde_socket
-wayland_display=egmde_wayland
+socket=${XDG_RUNTIME_DIR}/cascade_socket
+wayland_display=cascade_wayland
 bindir=$(dirname $0)
 
 while [ $# -gt 0 ]
 do
   if [ "$1" == "--help" -o "$1" == "-h" ]
   then
-    echo "$(basename $0) - Handy launch script for egmde on the desktop"
+    echo "$(basename $0) - Handy launch script for cascade on the desktop"
     echo "Usage: $(basename $0) [shell options]"
     exit 0
   else break
@@ -29,4 +29,4 @@ keymap=$(gsettings get org.gnome.desktop.input-sources sources | grep -Po "'[[:a
 export MIR_SERVER_WAYLAND_SOCKET_NAME=${wayland_display}
 export MIR_SERVER_FILE=${socket}
 export MIR_SERVER_KEYMAP=${keymap}
-exec ${bindir}egmde "$@"
+exec ${bindir}cascade "$@"

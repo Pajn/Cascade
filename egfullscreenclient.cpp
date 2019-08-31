@@ -33,7 +33,7 @@
 #include <cstring>
 #include <system_error>
 
-void egmde::FullscreenClient::Output::geometry(
+void cascade::FullscreenClient::Output::geometry(
     void* data,
     struct wl_output* /*wl_output*/,
     int32_t x,
@@ -53,7 +53,7 @@ void egmde::FullscreenClient::Output::geometry(
 }
 
 
-void egmde::FullscreenClient::Output::mode(
+void cascade::FullscreenClient::Output::mode(
     void *data,
     struct wl_output* /*wl_output*/,
     uint32_t flags,
@@ -70,11 +70,11 @@ void egmde::FullscreenClient::Output::mode(
         output->height = height;
 }
 
-void egmde::FullscreenClient::Output::scale(void* /*data*/, wl_output* /*wl_output*/, int32_t /*factor*/)
+void cascade::FullscreenClient::Output::scale(void* /*data*/, wl_output* /*wl_output*/, int32_t /*factor*/)
 {
 }
 
-egmde::FullscreenClient::Output::Output(
+cascade::FullscreenClient::Output::Output(
     wl_output* output,
     std::function<void(Output const&)> on_constructed,
     std::function<void(Output const&)> on_change)
@@ -85,26 +85,26 @@ egmde::FullscreenClient::Output::Output(
     wl_output_add_listener(output, &output_listener, this);
 }
 
-egmde::FullscreenClient::Output::~Output()
+cascade::FullscreenClient::Output::~Output()
 {
     if (output)
         wl_output_destroy(output);
 }
 
-wl_output_listener const egmde::FullscreenClient::Output::output_listener = {
+wl_output_listener const cascade::FullscreenClient::Output::output_listener = {
     &geometry,
     &mode,
     &done,
     &scale,
 };
 
-void egmde::FullscreenClient::Output::done(void* data, struct wl_output* /*wl_output*/)
+void cascade::FullscreenClient::Output::done(void* data, struct wl_output* /*wl_output*/)
 {
     auto output = static_cast<Output*>(data);
     output->on_done(*output);
 }
 
-egmde::FullscreenClient::FullscreenClient(wl_display* display) :
+cascade::FullscreenClient::FullscreenClient(wl_display* display) :
     shutdown_signal{::eventfd(0, EFD_CLOEXEC)},
     keyboard_context_{xkb_context_new(XKB_CONTEXT_NO_FLAGS)},
     registry{nullptr, [](auto){}}
@@ -126,7 +126,7 @@ egmde::FullscreenClient::FullscreenClient(wl_display* display) :
     wl_registry_add_listener(registry.get(), &registry_listener, this);
 }
 
-void egmde::FullscreenClient::on_output_changed(Output const* output)
+void cascade::FullscreenClient::on_output_changed(Output const* output)
 {
     {
         std::lock_guard<decltype(outputs_mutex)> lock{outputs_mutex};
@@ -157,7 +157,7 @@ void egmde::FullscreenClient::on_output_changed(Output const* output)
     wl_display_roundtrip(display);
 }
 
-void egmde::FullscreenClient::on_output_gone(Output const* output)
+void cascade::FullscreenClient::on_output_gone(Output const* output)
 {
     {
         std::lock_guard<decltype(outputs_mutex)> lock{outputs_mutex};
@@ -207,7 +207,7 @@ void egmde::FullscreenClient::on_output_gone(Output const* output)
     wl_display_roundtrip(display);
 }
 
-void egmde::FullscreenClient::on_new_output(Output const* output)
+void cascade::FullscreenClient::on_new_output(Output const* output)
 {
     {
         std::lock_guard<decltype(outputs_mutex)> lock{outputs_mutex};
@@ -229,7 +229,7 @@ void egmde::FullscreenClient::on_new_output(Output const* output)
     wl_display_roundtrip(display);
 }
 
-auto egmde::FullscreenClient::make_shm_pool(int size, void **data) const
+auto cascade::FullscreenClient::make_shm_pool(int size, void **data) const
 -> std::unique_ptr<wl_shm_pool, void(*)(wl_shm_pool*)>
 {
     mir::Fd fd{open("/dev/shm", O_TMPFILE | O_RDWR | O_EXCL, S_IRWXU)};
@@ -250,7 +250,7 @@ auto egmde::FullscreenClient::make_shm_pool(int size, void **data) const
     return {wl_shm_create_pool(shm, fd, size),&wl_shm_pool_destroy};
 }
 
-egmde::FullscreenClient::~FullscreenClient()
+cascade::FullscreenClient::~FullscreenClient()
 {
     {
         std::lock_guard<decltype(outputs_mutex)> lock{outputs_mutex};
@@ -261,7 +261,7 @@ egmde::FullscreenClient::~FullscreenClient()
     wl_display_roundtrip(display);
 }
 
-void egmde::FullscreenClient::new_global(
+void cascade::FullscreenClient::new_global(
     void* data,
     struct wl_registry* registry,
     uint32_t id,
@@ -307,7 +307,7 @@ void egmde::FullscreenClient::new_global(
     }
 }
 
-void egmde::FullscreenClient::remove_global(
+void cascade::FullscreenClient::remove_global(
     void* data,
     struct wl_registry* /*registry*/,
     uint32_t id)
@@ -323,7 +323,7 @@ void egmde::FullscreenClient::remove_global(
     // TODO: We should probably also delete any other globals we've bound to that disappear.
 }
 
-void egmde::FullscreenClient::run(wl_display* display)
+void cascade::FullscreenClient::run(wl_display* display)
 {
     enum FdIndices {
         display_fd = 0,
@@ -367,7 +367,7 @@ void egmde::FullscreenClient::run(wl_display* display)
     }
 }
 
-void egmde::FullscreenClient::stop()
+void cascade::FullscreenClient::stop()
 {
     if (eventfd_write(shutdown_signal, 1) == -1)
     {
@@ -375,7 +375,7 @@ void egmde::FullscreenClient::stop()
     }
 }
 
-void egmde::FullscreenClient::for_each_surface(std::function<void(SurfaceInfo&)> const& f) const
+void cascade::FullscreenClient::for_each_surface(std::function<void(SurfaceInfo&)> const& f) const
 {
     {
         std::lock_guard<decltype(outputs_mutex)> lock{outputs_mutex};
@@ -387,7 +387,7 @@ void egmde::FullscreenClient::for_each_surface(std::function<void(SurfaceInfo&)>
     wl_display_roundtrip(display);
 }
 
-void egmde::FullscreenClient::keyboard_keymap(wl_keyboard* /*keyboard*/, uint32_t /*format*/, int32_t fd, uint32_t size)
+void cascade::FullscreenClient::keyboard_keymap(wl_keyboard* /*keyboard*/, uint32_t /*format*/, int32_t fd, uint32_t size)
 {
     char* keymap_string = static_cast<decltype(keymap_string)>(mmap(NULL, size, PROT_READ, MAP_SHARED, fd, 0));
     xkb_keymap_unref(keyboard_map_);
@@ -398,7 +398,7 @@ void egmde::FullscreenClient::keyboard_keymap(wl_keyboard* /*keyboard*/, uint32_
     keyboard_state_ = xkb_state_new(keyboard_map_);
 }
 
-void egmde::FullscreenClient::keyboard_enter(
+void cascade::FullscreenClient::keyboard_enter(
     wl_keyboard* /*keyboard*/,
     uint32_t /*serial*/,
     wl_surface*/*surface*/,
@@ -406,11 +406,11 @@ void egmde::FullscreenClient::keyboard_enter(
 {
 }
 
-void egmde::FullscreenClient::keyboard_leave(wl_keyboard* /*keyboard*/, uint32_t /*serial*/, wl_surface* /*surface*/)
+void cascade::FullscreenClient::keyboard_leave(wl_keyboard* /*keyboard*/, uint32_t /*serial*/, wl_surface* /*surface*/)
 {
 }
 
-void egmde::FullscreenClient::keyboard_key(
+void cascade::FullscreenClient::keyboard_key(
     wl_keyboard* /*keyboard*/,
     uint32_t /*serial*/,
     uint32_t /*time*/,
@@ -419,7 +419,7 @@ void egmde::FullscreenClient::keyboard_key(
 {
 }
 
-void egmde::FullscreenClient::keyboard_modifiers(
+void cascade::FullscreenClient::keyboard_modifiers(
     wl_keyboard */*keyboard*/,
     uint32_t /*serial*/, uint32_t mods_depressed,
     uint32_t mods_latched,
@@ -430,11 +430,11 @@ void egmde::FullscreenClient::keyboard_modifiers(
         xkb_state_update_mask(keyboard_state_, mods_depressed, mods_latched, mods_locked, 0, 0, group);
 }
 
-void egmde::FullscreenClient::keyboard_repeat_info(wl_keyboard* /*wl_keyboard*/, int32_t /*rate*/, int32_t /*delay*/)
+void cascade::FullscreenClient::keyboard_repeat_info(wl_keyboard* /*wl_keyboard*/, int32_t /*rate*/, int32_t /*delay*/)
 {
 }
 
-void egmde::FullscreenClient::pointer_enter(
+void cascade::FullscreenClient::pointer_enter(
     wl_pointer* /*pointer*/,
     uint32_t /*serial*/,
     wl_surface* /*surface*/,
@@ -443,15 +443,15 @@ void egmde::FullscreenClient::pointer_enter(
 {
 }
 
-void egmde::FullscreenClient::pointer_leave(wl_pointer* /*pointer*/, uint32_t /*serial*/, wl_surface* /*surface*/)
+void cascade::FullscreenClient::pointer_leave(wl_pointer* /*pointer*/, uint32_t /*serial*/, wl_surface* /*surface*/)
 {
 }
 
-void egmde::FullscreenClient::pointer_motion(wl_pointer* /*pointer*/, uint32_t /*time*/, wl_fixed_t /*x*/, wl_fixed_t /*y*/)
+void cascade::FullscreenClient::pointer_motion(wl_pointer* /*pointer*/, uint32_t /*time*/, wl_fixed_t /*x*/, wl_fixed_t /*y*/)
 {
 }
 
-void egmde::FullscreenClient::pointer_button(
+void cascade::FullscreenClient::pointer_button(
     wl_pointer* /*pointer*/,
     uint32_t /*serial*/,
     uint32_t /*time*/,
@@ -460,7 +460,7 @@ void egmde::FullscreenClient::pointer_button(
 {
 }
 
-void egmde::FullscreenClient::pointer_axis(
+void cascade::FullscreenClient::pointer_axis(
     wl_pointer* /*pointer*/,
     uint32_t /*time*/,
     uint32_t /*axis*/,
@@ -468,23 +468,23 @@ void egmde::FullscreenClient::pointer_axis(
 {
 }
 
-void egmde::FullscreenClient::pointer_frame(wl_pointer* /*pointer*/)
+void cascade::FullscreenClient::pointer_frame(wl_pointer* /*pointer*/)
 {
 }
 
-void egmde::FullscreenClient::pointer_axis_source(wl_pointer* /*pointer*/, uint32_t /*axis_source*/)
+void cascade::FullscreenClient::pointer_axis_source(wl_pointer* /*pointer*/, uint32_t /*axis_source*/)
 {
 }
 
-void egmde::FullscreenClient::pointer_axis_stop(wl_pointer* /*pointer*/, uint32_t /*time*/, uint32_t /*axis*/)
+void cascade::FullscreenClient::pointer_axis_stop(wl_pointer* /*pointer*/, uint32_t /*time*/, uint32_t /*axis*/)
 {
 }
 
-void egmde::FullscreenClient::pointer_axis_discrete(wl_pointer* /*pointer*/, uint32_t /*axis*/, int32_t /*discrete*/)
+void cascade::FullscreenClient::pointer_axis_discrete(wl_pointer* /*pointer*/, uint32_t /*axis*/, int32_t /*discrete*/)
 {
 }
 
-void egmde::FullscreenClient::touch_down(
+void cascade::FullscreenClient::touch_down(
     wl_touch* /*touch*/,
     uint32_t /*serial*/,
     uint32_t /*time*/,
@@ -495,7 +495,7 @@ void egmde::FullscreenClient::touch_down(
 {
 }
 
-void egmde::FullscreenClient::touch_up(
+void cascade::FullscreenClient::touch_up(
     wl_touch* /*touch*/,
     uint32_t /*serial*/,
     uint32_t /*time*/,
@@ -503,7 +503,7 @@ void egmde::FullscreenClient::touch_up(
 {
 }
 
-void egmde::FullscreenClient::touch_motion(
+void cascade::FullscreenClient::touch_motion(
     wl_touch* /*touch*/,
     uint32_t /*time*/,
     int32_t /*id*/,
@@ -512,15 +512,15 @@ void egmde::FullscreenClient::touch_motion(
 {
 }
 
-void egmde::FullscreenClient::touch_frame(wl_touch* /*touch*/)
+void cascade::FullscreenClient::touch_frame(wl_touch* /*touch*/)
 {
 }
     
-void egmde::FullscreenClient::touch_cancel(wl_touch* /*touch*/)
+void cascade::FullscreenClient::touch_cancel(wl_touch* /*touch*/)
 {
 }
 
-void egmde::FullscreenClient::touch_shape(
+void cascade::FullscreenClient::touch_shape(
     wl_touch* /*touch*/,
     int32_t /*id*/,
     wl_fixed_t /*major*/,
@@ -528,14 +528,14 @@ void egmde::FullscreenClient::touch_shape(
 {
 }
 
-void egmde::FullscreenClient::touch_orientation(
+void cascade::FullscreenClient::touch_orientation(
     wl_touch* /*touch*/,
     int32_t /*id*/,
     wl_fixed_t /*orientation*/)
 {
 }
 
-void egmde::FullscreenClient::seat_capabilities(wl_seat* seat, uint32_t capabilities)
+void cascade::FullscreenClient::seat_capabilities(wl_seat* seat, uint32_t capabilities)
 {
     if (capabilities & WL_SEAT_CAPABILITY_POINTER) {
         static wl_pointer_listener pointer_listener =
@@ -587,11 +587,11 @@ void egmde::FullscreenClient::seat_capabilities(wl_seat* seat, uint32_t capabili
     }
 }
 
-void egmde::FullscreenClient::seat_name(wl_seat* /*seat*/, const char */*name*/)
+void cascade::FullscreenClient::seat_name(wl_seat* /*seat*/, const char */*name*/)
 {
 }
 
-void egmde::FullscreenClient::add_seat_listener(FullscreenClient* self, wl_seat* seat)
+void cascade::FullscreenClient::add_seat_listener(FullscreenClient* self, wl_seat* seat)
 {
     static struct wl_seat_listener seat_listener =
         {

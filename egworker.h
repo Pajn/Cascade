@@ -16,15 +16,15 @@
  * Authored by: Alan Griffiths <alan@octopull.co.uk>
  */
 
-#ifndef EGMDE_EGWORKER_H
-#define EGMDE_EGWORKER_H
+#ifndef CASCADE_EGWORKER_H
+#define CASCADE_EGWORKER_H
 
 #include <condition_variable>
 #include <functional>
 #include <mutex>
 #include <queue>
 
-namespace egmde
+namespace cascade
 {
 class Worker
 {
@@ -49,4 +49,4 @@ private:
 };
 }
 
-#endif //EGMDE_EGWORKER_H
+#endif //CASCADE_EGWORKER_H

@@ -30,7 +30,7 @@
 using namespace mir::geometry;
 
 
-void egmde::WindowManagerPolicy::keep_size_within_limits(
+void cascade::WindowManagerPolicy::keep_size_within_limits(
     WindowInfo const& window_info, Displacement& delta, Width& new_width, Height& new_height) const
 {
     auto const min_width  = std::max(window_info.min_width(), Width{5});
@@ -68,7 +68,7 @@ void egmde::WindowManagerPolicy::keep_size_within_limits(
     }
 }
 
-egmde::WindowManagerPolicy::WindowManagerPolicy(WindowManagerTools const& tools, Wallpaper const& wallpaper, Launcher const& launcher) :
+cascade::WindowManagerPolicy::WindowManagerPolicy(WindowManagerTools const& tools, Wallpaper const& wallpaper, Launcher const& launcher) :
     MinimalWindowManager{tools},
     wallpaper{&wallpaper},
     launcher{&launcher}
@@ -77,7 +77,7 @@ egmde::WindowManagerPolicy::WindowManagerPolicy(WindowManagerTools const& tools,
     wm = rust::init_wm(this->tools.get());
 }
 
-miral::WindowSpecification egmde::WindowManagerPolicy::place_new_window(
+miral::WindowSpecification cascade::WindowManagerPolicy::place_new_window(
     miral::ApplicationInfo const& app_info, miral::WindowSpecification const& request_parameters)
 {
     auto result = MinimalWindowManager::place_new_window(app_info, request_parameters);
@@ -95,40 +95,40 @@ miral::WindowSpecification egmde::WindowManagerPolicy::place_new_window(
     return result;
 }
 
-bool egmde::WindowManagerPolicy::handle_keyboard_event(MirKeyboardEvent const* event)
+bool cascade::WindowManagerPolicy::handle_keyboard_event(MirKeyboardEvent const* event)
 {
     return rust::handle_keyboard_event(wm, event) 
         || MinimalWindowManager::handle_keyboard_event(event);
 }
-bool egmde::WindowManagerPolicy::handle_pointer_event(MirPointerEvent const* event)
+bool cascade::WindowManagerPolicy::handle_pointer_event(MirPointerEvent const* event)
 {
     return rust::handle_pointer_event(wm, event);
 }
-void egmde::WindowManagerPolicy::handle_request_move(WindowInfo& window_info, MirInputEvent const* input_event)
+void cascade::WindowManagerPolicy::handle_request_move(WindowInfo& window_info, MirInputEvent const* input_event)
 {
     rust::handle_request_move(wm, &window_info, input_event);
 }
-void egmde::WindowManagerPolicy::handle_request_resize(WindowInfo& window_info, MirInputEvent const* input_event, MirResizeEdge edge)
+void cascade::WindowManagerPolicy::handle_request_resize(WindowInfo& window_info, MirInputEvent const* input_event, MirResizeEdge edge)
 {
     rust::handle_request_resize(wm, &window_info, input_event, edge);
 }
 
-void egmde::WindowManagerPolicy::handle_window_ready(WindowInfo& window_info)
+void cascade::WindowManagerPolicy::handle_window_ready(WindowInfo& window_info)
 {
     MinimalWindowManager::handle_window_ready(window_info);
     rust::handle_window_ready(wm, &window_info);
 }
 
-void egmde::WindowManagerPolicy::advise_focus_gained(WindowInfo const& window_info)
+void cascade::WindowManagerPolicy::advise_focus_gained(WindowInfo const& window_info)
 {
     MinimalWindowManager::advise_focus_gained(window_info);
     rust::advise_focus_gained(wm, &window_info);
 }
-void egmde::WindowManagerPolicy::advise_delete_window(WindowInfo const& window_info)
+void cascade::WindowManagerPolicy::advise_delete_window(WindowInfo const& window_info)
 {
     rust::advise_delete_window(wm, &window_info);
 }
-void egmde::WindowManagerPolicy::handle_modify_window(WindowInfo& window_info, WindowSpecification const& modifications)
+void cascade::WindowManagerPolicy::handle_modify_window(WindowInfo& window_info, WindowSpecification const& modifications)
 {
     auto specification = modifications;
     rust::pre_handle_modify_window(wm, &window_info, &specification);
@@ -136,28 +136,28 @@ void egmde::WindowManagerPolicy::handle_modify_window(WindowInfo& window_info, W
     rust::post_handle_modify_window(wm, &window_info, &specification);
 }
 
-void egmde::WindowManagerPolicy::advise_application_zone_create(miral::Zone const& zone)
+void cascade::WindowManagerPolicy::advise_application_zone_create(miral::Zone const& zone)
 {
     rust::advise_application_zone_create(wm, &zone);
 }
-void egmde::WindowManagerPolicy::advise_application_zone_update(miral::Zone const& updated, miral::Zone const& original)
+void cascade::WindowManagerPolicy::advise_application_zone_update(miral::Zone const& updated, miral::Zone const& original)
 {
     rust::advise_application_zone_update(wm, &updated, &original);
 }
-void egmde::WindowManagerPolicy::advise_application_zone_delete(miral::Zone const& zone)
+void cascade::WindowManagerPolicy::advise_application_zone_delete(miral::Zone const& zone)
 {
     rust::advise_application_zone_delete(wm, &zone);
 }
 
-void egmde::WindowManagerPolicy::advise_output_create(Output const& output)
+void cascade::WindowManagerPolicy::advise_output_create(Output const& output)
 {
     rust::advise_output_create(wm, &output);
 }
-void egmde::WindowManagerPolicy::advise_output_update(Output const& updated, Output const& original)
+void cascade::WindowManagerPolicy::advise_output_update(Output const& updated, Output const& original)
 {
     rust::advise_output_update(wm, &updated, &original);
 }
-void egmde::WindowManagerPolicy::advise_output_delete(Output const& output)
+void cascade::WindowManagerPolicy::advise_output_delete(Output const& output)
 {
     rust::advise_output_delete(wm, &output);
 }

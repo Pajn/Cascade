@@ -16,8 +16,8 @@
  * Authored by: Alan Griffiths <alan@octopull.co.uk>
  */
 
-#ifndef EGMDE_EGFULLSCREENCLIENT_H
-#define EGMDE_EGFULLSCREENCLIENT_H
+#ifndef CASCADE_EGFULLSCREENCLIENT_H
+#define CASCADE_EGFULLSCREENCLIENT_H
 
 #include <mir/fd.h>
 #include <mir/geometry/rectangles.h>
@@ -33,7 +33,7 @@ struct xkb_context;
 struct xkb_keymap;
 struct xkb_state;
 
-namespace egmde
+namespace cascade
 {
 class FullscreenClient
 {
@@ -256,4 +256,4 @@ private:
 };
 }
 
-#endif //EGMDE_EGFULLSCREENCLIENT_H
+#endif //CASCADE_EGFULLSCREENCLIENT_H

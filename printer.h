@@ -16,8 +16,8 @@
  * Authored by: Alan Griffiths <alan@octopull.co.uk>
  */
 
-#ifndef EGMDE_PRINTER_H
-#define EGMDE_PRINTER_H
+#ifndef CASCADE_PRINTER_H
+#define CASCADE_PRINTER_H
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
@@ -25,7 +25,7 @@
 #include <codecvt>
 #include <locale>
 
-namespace egmde
+namespace cascade
 {
 struct Printer
 {
@@ -51,4 +51,4 @@ private:
 };
 }
 
-#endif //EGMDE_PRINTER_H
+#endif //CASCADE_PRINTER_H

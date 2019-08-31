@@ -16,8 +16,8 @@
  * Authored by: Alan Griffiths <alan@octopull.co.uk>
  */
 
-#ifndef EGMDE_LAUNCHER_H
-#define EGMDE_LAUNCHER_H
+#ifndef CASCADE_LAUNCHER_H
+#define CASCADE_LAUNCHER_H
 
 #include <miral/application.h>
 
@@ -27,7 +27,7 @@
 #include <mutex>
 
 struct wl_display;
-namespace egmde
+namespace cascade
 {
 class Launcher
 {
@@ -53,4 +53,4 @@ private:
     std::weak_ptr<Self> self;
 };
 }
-#endif //EGMDE_LAUNCHER_H
+#endif //CASCADE_LAUNCHER_H

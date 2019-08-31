@@ -40,10 +40,10 @@ int main(int argc, char const* argv[])
 {
     MirRunner runner{argc, argv};
 
-    egmde::Wallpaper wallpaper;
+    cascade::Wallpaper wallpaper;
 
     ExternalClientLauncher external_client_launcher;
-    egmde::Launcher launcher{external_client_launcher};
+    cascade::Launcher launcher{external_client_launcher};
 
     auto const keyboard_shortcuts = [&](MirEvent const* event)
         {
@@ -122,13 +122,13 @@ int main(int argc, char const* argv[])
             CommandLineOption{[&](auto& option) { wallpaper.top(option);},
                               "wallpaper-top",    "Colour of wallpaper RGB", "0x000000"},
             CommandLineOption{[&](auto& option) { wallpaper.bottom(option);},
-                              "wallpaper-bottom", "Colour of wallpaper RGB", EGMDE_WALLPAPER_BOTTOM},
+                              "wallpaper-bottom", "Colour of wallpaper RGB", CASCADE_WALLPAPER_BOTTOM},
             StartupInternalClient{std::ref(wallpaper)},
             external_client_launcher,
             StartupInternalClient{std::ref(launcher)},
             Keymap{},
             AppendEventFilter{keyboard_shortcuts},
             AppendEventFilter{touch_shortcuts},
-            set_window_management_policy<egmde::WindowManagerPolicy>(wallpaper, launcher)
+            set_window_management_policy<cascade::WindowManagerPolicy>(wallpaper, launcher)
         });
 }

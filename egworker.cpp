@@ -18,9 +18,9 @@
 
 #include "egworker.h"
 
-egmde::Worker::~Worker() = default;
+cascade::Worker::~Worker() = default;
 
-void egmde::Worker::do_work()
+void cascade::Worker::do_work()
 {
     while (!work_done)
     {
@@ -36,19 +36,19 @@ void egmde::Worker::do_work()
     }
 }
 
-void egmde::Worker::enqueue_work(std::function<void()> const& functor)
+void cascade::Worker::enqueue_work(std::function<void()> const& functor)
 {
     std::lock_guard<decltype(work_mutex)> lock{work_mutex};
     work_queue.push(functor);
     work_cv.notify_one();
 }
 
-void egmde::Worker::start_work()
+void cascade::Worker::start_work()
 {
     do_work();
 }
 
-void egmde::Worker::stop_work()
+void cascade::Worker::stop_work()
 {
     enqueue_work([this] { work_done = true; });
 }

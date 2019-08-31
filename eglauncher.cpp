@@ -195,7 +195,7 @@ auto load_details() -> std::vector<app_details>
 auto list_desktop_files() -> file_list
 {
     std::string search_path{"~/.local/share/applications:/usr/share/applications:/var/lib/snapd/desktop/applications"};
-    if (char const* desktop_path = getenv("EGMDE_DESKTOP_PATH"))
+    if (char const* desktop_path = getenv("CASCADE_DESKTOP_PATH"))
         search_path = desktop_path;
     // search_paths relies on a ":" sentinal value
     search_path +=  ":";
@@ -205,7 +205,7 @@ auto list_desktop_files() -> file_list
 }
 }
 
-struct egmde::Launcher::Self : egmde::FullscreenClient
+struct cascade::Launcher::Self : cascade::FullscreenClient
 {
     Self(wl_display* display, ExternalClientLauncher& external_client_launcher);
 
@@ -246,12 +246,12 @@ private:
     std::atomic<Output const*> mutable showing{nullptr};
 };
 
-egmde::Launcher::Launcher(miral::ExternalClientLauncher& external_client_launcher) :
+cascade::Launcher::Launcher(miral::ExternalClientLauncher& external_client_launcher) :
     external_client_launcher{external_client_launcher}
 {
 }
 
-void egmde::Launcher::stop()
+void cascade::Launcher::stop()
 {
     if (auto ss = self.lock())
     {
@@ -261,7 +261,7 @@ void egmde::Launcher::stop()
     }
 }
 
-void egmde::Launcher::show()
+void cascade::Launcher::show()
 {
     if (auto ss = self.lock())
     {
@@ -269,7 +269,7 @@ void egmde::Launcher::show()
     }
 }
 
-void egmde::Launcher::operator()(wl_display* display)
+void cascade::Launcher::operator()(wl_display* display)
 {
     auto client = std::make_shared<Self>(display, external_client_launcher);
     self = client;
@@ -280,7 +280,7 @@ void egmde::Launcher::operator()(wl_display* display)
     std::lock_guard<decltype(mutex)> lock{mutex};
 }
 
-void egmde::Launcher::Self::start()
+void cascade::Launcher::Self::start()
 {
     if (!running.exchange(true))
     {
@@ -297,7 +297,7 @@ void egmde::Launcher::Self::start()
     }
 }
 
-void egmde::Launcher::Self::keyboard_key(wl_keyboard* /*keyboard*/, uint32_t /*serial*/, uint32_t /*time*/, uint32_t key, uint32_t state)
+void cascade::Launcher::Self::keyboard_key(wl_keyboard* /*keyboard*/, uint32_t /*serial*/, uint32_t /*time*/, uint32_t key, uint32_t state)
 {
     if (state == WL_KEYBOARD_KEY_STATE_PRESSED)
     {
@@ -354,13 +354,13 @@ void egmde::Launcher::Self::keyboard_key(wl_keyboard* /*keyboard*/, uint32_t /*s
     }
 }
 
-void egmde::Launcher::Self::pointer_motion(wl_pointer* pointer, uint32_t time, wl_fixed_t x, wl_fixed_t y)
+void cascade::Launcher::Self::pointer_motion(wl_pointer* pointer, uint32_t time, wl_fixed_t x, wl_fixed_t y)
 {
     pointer_y = wl_fixed_to_int(y);
     FullscreenClient::pointer_motion(pointer, time, x, y);
 }
 
-void egmde::Launcher::Self::pointer_button(
+void cascade::Launcher::Self::pointer_button(
     wl_pointer* pointer,
     uint32_t serial,
     uint32_t time,
@@ -381,7 +381,7 @@ void egmde::Launcher::Self::pointer_button(
     FullscreenClient::pointer_button(pointer, serial, time, button, state);
 }
 
-void egmde::Launcher::Self::pointer_enter(
+void cascade::Launcher::Self::pointer_enter(
     wl_pointer* pointer,
     uint32_t serial,
     wl_surface* surface,
@@ -399,7 +399,7 @@ void egmde::Launcher::Self::pointer_enter(
     FullscreenClient::pointer_enter(pointer, serial, surface, x, y);
 }
 
-void egmde::Launcher::Self::touch_down(
+void cascade::Launcher::Self::touch_down(
     wl_touch* touch, uint32_t serial, uint32_t time, wl_surface* surface, int32_t id, wl_fixed_t x, wl_fixed_t y)
 {
     auto const touch_y = wl_fixed_to_int(y);
@@ -424,7 +424,7 @@ void egmde::Launcher::Self::touch_down(
     FullscreenClient::touch_down(touch, serial, time, surface, id, x, y);
 }
 
-void egmde::Launcher::Self::run_app()
+void cascade::Launcher::Self::run_app()
 {
     setenv("NO_AT_BRIDGE", "1", 1);
     unsetenv("DISPLAY");
@@ -446,7 +446,7 @@ void egmde::Launcher::Self::run_app()
     if (app == "gnome-terminal" && boost::filesystem::exists("/usr/bin/gnome-terminal.real"))
         app = "gnome-terminal --disable-factory";
 
-    static char const* launch_prefix = getenv("EGMDE_LAUNCH_PREFIX");
+    static char const* launch_prefix = getenv("CASCADE_LAUNCH_PREFIX");
 
     std::vector<std::string> command;
 
@@ -478,7 +478,7 @@ void egmde::Launcher::Self::run_app()
     for_each_surface([this](auto& info) { draw_screen(info); });
 }
 
-void egmde::Launcher::Self::next_app()
+void cascade::Launcher::Self::next_app()
 {
     if (++current_app == apps.end())
         current_app = apps.begin();
@@ -486,7 +486,7 @@ void egmde::Launcher::Self::next_app()
     for_each_surface([this](auto& info) { draw_screen(info); });
 }
 
-void egmde::Launcher::Self::prev_app()
+void cascade::Launcher::Self::prev_app()
 {
     if (current_app == apps.begin())
         current_app = apps.end();
@@ -496,7 +496,7 @@ void egmde::Launcher::Self::prev_app()
     for_each_surface([this](auto& info) { draw_screen(info); });
 }
 
-egmde::Launcher::Self::Self(wl_display* display, ExternalClientLauncher& external_client_launcher) :
+cascade::Launcher::Self::Self(wl_display* display, ExternalClientLauncher& external_client_launcher) :
     FullscreenClient{display},
     external_client_launcher{external_client_launcher}
 {
@@ -504,7 +504,7 @@ egmde::Launcher::Self::Self(wl_display* display, ExternalClientLauncher& externa
     wl_display_roundtrip(display);
 }
 
-void egmde::Launcher::Self::draw_screen(SurfaceInfo& info) const
+void cascade::Launcher::Self::draw_screen(SurfaceInfo& info) const
 {
     if (running)
     {
@@ -516,7 +516,7 @@ void egmde::Launcher::Self::draw_screen(SurfaceInfo& info) const
     }
 }
 
-void egmde::Launcher::Self::show_screen(SurfaceInfo& info) const
+void cascade::Launcher::Self::show_screen(SurfaceInfo& info) const
 {
 
     Output const* active_output = showing.load();
@@ -586,24 +586,24 @@ void egmde::Launcher::Self::show_screen(SurfaceInfo& info) const
     wl_surface_commit(info.surface);
 }
 
-void egmde::Launcher::Self::clear_screen(SurfaceInfo& info) const
+void cascade::Launcher::Self::clear_screen(SurfaceInfo& info) const
 {
     info.clear_window();
 }
 
-void egmde::Launcher::Self::keyboard_leave(wl_keyboard* /*keyboard*/, uint32_t /*serial*/, wl_surface* /*surface*/)
+void cascade::Launcher::Self::keyboard_leave(wl_keyboard* /*keyboard*/, uint32_t /*serial*/, wl_surface* /*surface*/)
 {
     running = false;
     for_each_surface([this](auto& info) { draw_screen(info); });
 }
 
-void egmde::Launcher::operator()(std::weak_ptr<mir::scene::Session> const& session)
+void cascade::Launcher::operator()(std::weak_ptr<mir::scene::Session> const& session)
 {
     std::lock_guard<decltype(mutex)> lock{mutex};
     weak_session = session;
 }
 
-auto egmde::Launcher::session() const -> std::shared_ptr<mir::scene::Session>
+auto cascade::Launcher::session() const -> std::shared_ptr<mir::scene::Session>
 {
     std::lock_guard<decltype(mutex)> lock{mutex};
     return weak_session.lock();

@@ -16,8 +16,8 @@
  * Authored by: Alan Griffiths <alan@octopull.co.uk>
  */
 
-#ifndef EGMDE_EGWALLPAPER_H
-#define EGMDE_EGWALLPAPER_H
+#ifndef CASCADE_EGWALLPAPER_H
+#define CASCADE_EGWALLPAPER_H
 
 #include <miral/application.h>
 #include <miral/window.h>
@@ -27,7 +27,7 @@
 #include <string>
 
 struct wl_display;
-namespace egmde
+namespace cascade
 {
 class Wallpaper
 {
@@ -55,4 +55,4 @@ private:
 };
 }
 
-#endif //EGMDE_EGWALLPAPER_H
+#endif //CASCADE_EGWALLPAPER_H

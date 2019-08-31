@@ -43,13 +43,13 @@ void render_gradient(int32_t width, int32_t height, unsigned char* row_, uint8_t
         row += 4*width;
     }
 
-    static egmde::Printer printer;
+    static cascade::Printer printer;
 
     printer.footer(width, height, row_, {"Ctrl-Alt-A = app launcher | Ctrl-Alt-BkSp = quit"});
 }
 }
 
-struct egmde::Wallpaper::Self : egmde::FullscreenClient
+struct cascade::Wallpaper::Self : cascade::FullscreenClient
 {
     Self(wl_display* display, uint8_t* bottom_colour, uint8_t* top_colour);
 
@@ -59,7 +59,7 @@ struct egmde::Wallpaper::Self : egmde::FullscreenClient
     uint8_t* const top_colour;
 };
 
-void egmde::Wallpaper::Self::draw_screen(SurfaceInfo& info) const
+void cascade::Wallpaper::Self::draw_screen(SurfaceInfo& info) const
 {
     bool const rotated = info.output->transform & WL_OUTPUT_TRANSFORM_90;
     auto const width = rotated ? info.output->height : info.output->width;
@@ -106,7 +106,7 @@ void egmde::Wallpaper::Self::draw_screen(SurfaceInfo& info) const
     wl_surface_commit(info.surface);
 }
 
-egmde::Wallpaper::Self::Self(wl_display* display, uint8_t* bottom_colour, uint8_t* top_colour) :
+cascade::Wallpaper::Self::Self(wl_display* display, uint8_t* bottom_colour, uint8_t* top_colour) :
     FullscreenClient(display),
     bottom_colour{bottom_colour},
     top_colour{top_colour}
@@ -115,7 +115,7 @@ egmde::Wallpaper::Self::Self(wl_display* display, uint8_t* bottom_colour, uint8_
     wl_display_roundtrip(display);
 }
 
-void egmde::Wallpaper::stop()
+void cascade::Wallpaper::stop()
 {
     if (auto ss = self.lock())
     {
@@ -126,7 +126,7 @@ void egmde::Wallpaper::stop()
 }
 
 
-void egmde::Wallpaper::bottom(std::string const& option)
+void cascade::Wallpaper::bottom(std::string const& option)
 {
     uint32_t value;
     std::stringstream interpreter{option};
@@ -139,7 +139,7 @@ void egmde::Wallpaper::bottom(std::string const& option)
     }
 }
 
-void egmde::Wallpaper::top(std::string const& option)
+void cascade::Wallpaper::top(std::string const& option)
 {
     uint32_t value;
     std::stringstream interpreter{option};
@@ -152,7 +152,7 @@ void egmde::Wallpaper::top(std::string const& option)
     }
 }
 
-void egmde::Wallpaper::operator()(wl_display* display)
+void cascade::Wallpaper::operator()(wl_display* display)
 {
     auto client = std::make_shared<Self>(display, bottom_colour, top_colour);
     self = client;
@@ -163,13 +163,13 @@ void egmde::Wallpaper::operator()(wl_display* display)
     std::lock_guard<decltype(mutex)> lock{mutex};
 }
 
-void egmde::Wallpaper::operator()(std::weak_ptr<mir::scene::Session> const& session)
+void cascade::Wallpaper::operator()(std::weak_ptr<mir::scene::Session> const& session)
 {
     std::lock_guard<decltype(mutex)> lock{mutex};
     weak_session = session;
 }
 
-auto egmde::Wallpaper::session() const -> std::shared_ptr<mir::scene::Session>
+auto cascade::Wallpaper::session() const -> std::shared_ptr<mir::scene::Session>
 {
     std::lock_guard<decltype(mutex)> lock{mutex};
     return weak_session.lock();

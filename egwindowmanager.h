@@ -16,15 +16,15 @@
  * Authored by: Alan Griffiths <alan@octopull.co.uk>
  */
 
-#ifndef EGMDE_EGWINDOWMANAGER_H
-#define EGMDE_EGWINDOWMANAGER_H
+#ifndef CASCADE_EGWINDOWMANAGER_H
+#define CASCADE_EGWINDOWMANAGER_H
 
 #include <miral/minimal_window_manager.h>
 #include <miral/window_management_policy.h>
 #include <miral/window_manager_tools.h>
 #include "rust_wm/rust_wm.h"
 
-namespace egmde
+namespace cascade
 {
 using namespace miral;
 class Wallpaper;
@@ -74,4 +74,4 @@ private:
 };
 }
 
-#endif //EGMDE_EGWINDOWMANAGER_H
+#endif //CASCADE_EGWINDOWMANAGER_H

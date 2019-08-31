@@ -44,9 +44,9 @@ auto default_font() -> char const*
 }
 }
 
-egmde::Printer::Printer()
+cascade::Printer::Printer()
 {
-    static char const* font_file = getenv("EGMDE_FONT");
+    static char const* font_file = getenv("CASCADE_FONT");
 
     if (!font_file) font_file = default_font();
 
@@ -57,17 +57,17 @@ egmde::Printer::Printer()
     {
         FT_Done_FreeType(lib);
         throw std::runtime_error{std::string{"WARNING: failed to load titlebar font: \""} +  font_file + "\"\n"
-            "(Hint: try setting EGMDE_FONT=<path to a font that exists>"};
+            "(Hint: try setting CASCADE_FONT=<path to a font that exists>"};
     }
 }
 
-egmde::Printer::~Printer()
+cascade::Printer::~Printer()
 {
     FT_Done_Face(face);
     FT_Done_FreeType(lib);
 }
 
-void egmde::Printer::print(int32_t width, int32_t height, char unsigned* region_address, std::string const& title_)
+void cascade::Printer::print(int32_t width, int32_t height, char unsigned* region_address, std::string const& title_)
 {
     auto const stride = 4*width;
     auto const title = converter.from_bytes(title_);
@@ -122,7 +122,7 @@ void egmde::Printer::print(int32_t width, int32_t height, char unsigned* region_
     }
 }
 
-void egmde::Printer::footer(int32_t width, int32_t height, char unsigned* region_address, std::initializer_list<char const*> const& lines)
+void cascade::Printer::footer(int32_t width, int32_t height, char unsigned* region_address, std::initializer_list<char const*> const& lines)
 {
     auto const stride = 4*width;
 

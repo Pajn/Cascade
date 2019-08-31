@@ -1,5 +1,5 @@
 [Desktop Entry]
-Name=egmde
+Name=Cascade
 Comment=The example Mir server
-Exec=egmde-launch
+Exec=cascade-launch
 Type=Application
