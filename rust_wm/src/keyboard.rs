@@ -47,13 +47,13 @@ pub fn handle_key_press(
     xkb::KEY_Left
       if modifiers == input_event_modifier::META_LEFT | input_event_modifier::SHIFT_LEFT =>
     {
-      naviate_monitor(wm, Direction::Left);
+      naviate_monitor(wm, Direction::Left, Activation::LastActive);
       true
     }
     xkb::KEY_Right
       if modifiers == input_event_modifier::META_LEFT | input_event_modifier::SHIFT_LEFT =>
     {
-      naviate_monitor(wm, Direction::Right);
+      naviate_monitor(wm, Direction::Right, Activation::LastActive);
       true
     }
     xkb::KEY_Left
@@ -62,7 +62,7 @@ pub fn handle_key_press(
           | input_event_modifier::CTRL_LEFT
           | input_event_modifier::SHIFT_LEFT =>
     {
-      move_window_monitor(wm, Direction::Left);
+      move_window_monitor(wm, Direction::Left, Activation::LastActive);
       true
     }
     xkb::KEY_Right
@@ -71,7 +71,7 @@ pub fn handle_key_press(
           | input_event_modifier::CTRL_LEFT
           | input_event_modifier::SHIFT_LEFT =>
     {
-      move_window_monitor(wm, Direction::Right);
+      move_window_monitor(wm, Direction::Right, Activation::LastActive);
       true
     }
     xkb::KEY_r if modifiers == input_event_modifier::META_LEFT => {

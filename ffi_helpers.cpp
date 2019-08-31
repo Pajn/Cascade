@@ -21,7 +21,11 @@ extern "C" void* get_active_window(miral::WindowManagerTools* tools)
 extern "C" void select_active_window(miral::WindowManagerTools* tools, miral::Window const* hint)
 {
     printf("tools %p, hint: %p\n", (void*) tools, (void*) hint);
-    tools->select_active_window(*hint);
+    if (hint == NULL) {
+        tools->select_active_window(miral::Window {});
+    } else {
+        tools->select_active_window(*hint);
+    }
 }
 
 extern "C" miral::Window* rust_get_window(std::shared_ptr<miral::Window> window)

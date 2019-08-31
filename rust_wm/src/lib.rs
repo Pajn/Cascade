@@ -121,8 +121,7 @@ pub extern "C" fn advise_focus_gained(
   let wm = unsafe { &mut *wm };
 
   if let Some(window_id) = wm.window_by_info(window_info).map(|w| w.id) {
-    wm.active_window = Some(window_id);
-    wm.active_workspace = wm.get_window(window_id).workspace;
+    wm.activate_window(window_id);
 
     ensure_window_visible(wm, window_id);
     update_window_positions(wm, wm.get_window(window_id).workspace);

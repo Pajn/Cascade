@@ -2,6 +2,7 @@ use crate::ffi_helpers::*;
 use mir_rs::*;
 use std::cmp;
 use std::collections::BTreeMap;
+use std::ptr;
 
 pub type Id = u64;
 
@@ -136,8 +137,9 @@ impl Window {
 pub struct Workspace {
   pub id: Id,
   pub on_monitor: Option<Id>,
-  pub windows: Vec<Id>,
   pub scroll_left: i32,
+  pub windows: Vec<Id>,
+  pub active_window: Option<Id>,
 }
 
 impl Workspace {
@@ -145,8 +147,9 @@ impl Workspace {
     Workspace {
       id: id_generator.next_id(),
       on_monitor: None,
-      windows: vec![],
       scroll_left: 0,
+      windows: vec![],
+      active_window: None,
     }
   }
 
@@ -293,7 +296,7 @@ impl WindowManager {
 
   pub fn add_window(&mut self, window: Window) -> () {
     println!("WM: {:?}, adding: {:?}", &self, &window);
-    let workspace = self.workspaces.get_mut(&self.active_workspace).unwrap();
+    let workspace = self.workspaces.get_mut(&window.workspace).unwrap();
 
     if let Some(active_window) = self.active_window {
       let index = workspace
@@ -304,26 +307,19 @@ impl WindowManager {
       workspace.windows.push(window.id);
     }
 
-    if !window.has_parent {
-      self.active_window = Some(window.id);
-      self.active_workspace = window.workspace;
-    }
-
+    let window_id = window.id;
+    let window_has_parent = window.has_parent;
     self.windows.insert(window.id, window);
+
+    if !window_has_parent {
+      self.activate_window(window_id);
+    }
   }
 
   pub fn delete_window(&mut self, window_id: Id) -> () {
-    let workspace = self.workspaces.get_mut(&self.active_workspace).unwrap();
-
-    let index = workspace
-      .windows
-      .iter()
-      .enumerate()
-      .find(|(_, w)| **w == window_id)
-      .expect("nowindow in workspace advise_delete_window")
-      .0;
-
-    workspace.windows.remove(index);
+    self
+      .remove_window_from_workspace(window_id)
+      .expect("nowindow in workspace advise_delete_window");
     self.windows.remove(&window_id);
 
     if self.active_window == Some(window_id) {
@@ -333,12 +329,55 @@ impl WindowManager {
     }
   }
 
-  pub fn focus_window(&mut self, window_id: Id) -> () {
-    let window = self.get_window(window_id);
+  pub fn activate_window(&mut self, window_id: Id) -> () {
+    let workspace_id = self.get_window(window_id).workspace;
+    let workspace = self.workspaces.get_mut(&workspace_id).unwrap();
 
-    unsafe {
-      let window_ptr = (*window.window_info).window();
-      select_active_window(self.tools, window_ptr);
+    workspace.active_window = Some(window_id);
+    self.active_window = Some(window_id);
+    self.active_workspace = workspace_id;
+  }
+
+  pub fn remove_window_from_workspace(&mut self, window: Id) -> Result<(), ()> {
+    let workspace = self.get_workspace(self.get_window(window).workspace);
+    let workspace_id = workspace.id;
+    if workspace.active_window == Some(window) {
+      let active_window = self.get_window(workspace.active_window.unwrap());
+      if active_window.is_tiled() {
+        let tiled_index = workspace.get_tiled_window_index(self, window).ok_or(())?;
+        let tiled_index = if tiled_index > 0 {
+          tiled_index - 1
+        } else {
+          tiled_index + 1
+        };
+        let next_active_window = workspace.get_tiled_windows(self).get(tiled_index).copied();
+        let workspace = self.workspaces.get_mut(&workspace_id).unwrap();
+        workspace.active_window = next_active_window;
+      } else {
+        let next_active_window = workspace.get_tiled_windows(self).last().copied();
+        let workspace = self.workspaces.get_mut(&workspace_id).unwrap();
+        workspace.active_window = next_active_window;
+      }
+    }
+    let workspace = self.workspaces.get_mut(&workspace_id).unwrap();
+    let raw_index = workspace.get_window_index(window).ok_or(())?;
+    workspace.windows.remove(raw_index);
+    Ok(())
+  }
+
+  pub fn focus_window(&mut self, window_id: Option<Id>) -> () {
+    self.active_window = window_id;
+    if let Some(window_id) = window_id {
+      let window = self.get_window(window_id);
+
+      unsafe {
+        let window_ptr = (*window.window_info).window();
+        select_active_window(self.tools, window_ptr);
+      }
+    } else {
+      unsafe {
+        select_active_window(self.tools, ptr::null());
+      }
     }
   }
 }
