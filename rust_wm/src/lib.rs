@@ -354,6 +354,73 @@ pub extern "C" fn handle_pointer_event(
   let modifiers = unsafe { raw::mir_pointer_event_modifiers(event) };
 
   let consume_event = match wm.gesture {
+    Gesture::Move(ref gesture) => {
+      if action == raw::MirPointerAction::mir_pointer_action_motion
+        && buttons == gesture.buttons
+        && modifiers == gesture.modifiers
+      {
+        let window_id = gesture.window;
+        let displacement = new_cursor - wm.old_cursor;
+        if new_cursor.y < 100 {
+          let window = wm.windows.get_mut(&window_id).unwrap();
+          if window.is_dragged {
+            window.is_dragged = false;
+          }
+          let window = wm.get_window(window_id);
+          let workspace_id = window.workspace;
+          let workspace = wm.workspaces.get_mut(&workspace_id).unwrap();
+          workspace.scroll_left -= displacement.dx;
+          wm.focus_window(Some(window_id));
+          arrange_windows_workspace(wm, workspace_id);
+        } else {
+          let window = wm.windows.get_mut(&window_id).unwrap();
+          if !window.is_dragged {
+            window.is_dragged = true;
+          }
+
+          let window = wm.get_window(window_id);
+          let workspace_id = window.workspace;
+          let window_width = window.width();
+
+          if let Some(left_window_id) = get_tiled_window(wm, window_id, Direction::Left) {
+            let left_window = wm.get_window(left_window_id);
+            if new_cursor.x < left_window.x() + left_window.width() / 2 + window_width / 2 {
+              wm.workspaces
+                .get_mut(&workspace_id)
+                .unwrap()
+                .swap_windows(window_id, left_window_id);
+              arrange_windows(wm);
+              return true;
+            }
+          }
+          if let Some(right_window_id) = get_tiled_window(wm, window_id, Direction::Right) {
+            let right_window = wm.get_window(right_window_id);
+            if new_cursor.x > right_window.x() + right_window.width() / 2 - window_width / 2 {
+              wm.workspaces
+                .get_mut(&workspace_id)
+                .unwrap()
+                .swap_windows(window_id, right_window_id);
+              arrange_windows(wm);
+              return true;
+            }
+          }
+
+          unsafe {
+            let window = (*window.window_info).window();
+            (*wm.tools).drag_window(window, displacement.into());
+          }
+        }
+
+        true
+      } else {
+        let window = wm.windows.get_mut(&gesture.window).unwrap();
+        window.is_dragged = false;
+        wm.gesture = Gesture::None;
+        let workspace_id = window.workspace;
+        arrange_windows_workspace(wm, workspace_id);
+        false
+      }
+    }
     Gesture::Resize(ref gesture) => {
       if action == raw::MirPointerAction::mir_pointer_action_motion
         && buttons == gesture.buttons
@@ -380,30 +447,27 @@ pub extern "C" fn handle_pointer_event(
   consume_event
 }
 
-#[no_mangle]
-pub extern "C" fn handle_request_move(
-  wm: *mut WindowManager,
-  _window_info: *mut miral::WindowInfo,
-  _input_event: *const raw::MirInputEvent,
-) -> () {
-  let _wm = unsafe { &mut *wm };
+enum GestureType {
+  Move,
+  Resize,
 }
 
-#[no_mangle]
-pub extern "C" fn handle_request_resize(
-  wm: *mut WindowManager,
+fn handle_pointer_request(
+  wm: &mut WindowManager,
   window_info: *mut miral::WindowInfo,
   input_event: *const raw::MirInputEvent,
   edge: raw::MirResizeEdge::Type,
+  gesture_type: GestureType,
 ) -> bool {
-  let wm = unsafe { &mut *wm };
-
   let input_event_type = unsafe { raw::mir_input_event_get_type(input_event) };
   if input_event_type != raw::MirInputEventType::mir_input_event_type_pointer {
     return false;
   }
 
   if let Some(window) = wm.window_by_info(window_info) {
+    if window.has_parent() {
+      return false;
+    }
     if window.state() != raw::MirWindowState::mir_window_state_restored {
       return false;
     }
@@ -412,21 +476,60 @@ pub extern "C" fn handle_request_resize(
     let buttons = unsafe { raw::mir_pointer_event_buttons(pointer_event) };
     let modifiers = unsafe { raw::mir_pointer_event_modifiers(pointer_event) };
 
-    wm.gesture = Gesture::Resize(ResizeGesture {
-      window: window.id,
-      buttons,
-      modifiers,
-      top_left: window.rendered_top_left(),
-      size: window.rendered_size(),
-      edge,
-    });
-
-    println!("Start resize: {:?}", wm.gesture);
+    match gesture_type {
+      GestureType::Move => {
+        wm.gesture = Gesture::Move(MoveGesture {
+          window: window.id,
+          buttons,
+          modifiers,
+          top_left: window.rendered_top_left(),
+        });
+      }
+      GestureType::Resize => {
+        wm.gesture = Gesture::Resize(ResizeGesture {
+          window: window.id,
+          buttons,
+          modifiers,
+          top_left: window.rendered_top_left(),
+          size: window.rendered_size(),
+          edge,
+        });
+      }
+    }
+    true
   } else {
-    println!("handle_request_resize window not found");
+    println!("handle_request_move window not found");
+    false
   }
+}
 
-  false
+#[no_mangle]
+pub extern "C" fn handle_request_move(
+  wm: *mut WindowManager,
+  window_info: *mut miral::WindowInfo,
+  input_event: *const raw::MirInputEvent,
+) -> () {
+  let wm = unsafe { &mut *wm };
+
+  handle_pointer_request(
+    wm,
+    window_info,
+    input_event,
+    raw::MirResizeEdge::mir_resize_edge_none,
+    GestureType::Move,
+  );
+}
+
+#[no_mangle]
+pub extern "C" fn handle_request_resize(
+  wm: *mut WindowManager,
+  window_info: *mut miral::WindowInfo,
+  input_event: *const raw::MirInputEvent,
+  edge: raw::MirResizeEdge::Type,
+) -> () {
+  let wm = unsafe { &mut *wm };
+
+  handle_pointer_request(wm, window_info, input_event, edge, GestureType::Resize);
 }
 
 #[cfg(test)]

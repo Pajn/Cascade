@@ -1,7 +1,7 @@
 use crate::entities::*;
+use mir_rs::*;
 use std::cmp;
 use std::cmp::Ordering;
-use mir_rs::*;
 
 fn update_cached_positions(wm: &mut WindowManager, workspace_id: Id) -> () {
   let monitor = wm.monitor_by_workspace(workspace_id);
@@ -83,6 +83,10 @@ pub fn update_window_positions(wm: &mut WindowManager, workspace_id: Id) -> () {
   for window_id in windows {
     let window = wm.get_window(window_id);
 
+    if window.is_dragged {
+      continue;
+    }
+
     let old_x = window.x();
     let old_y = window.y();
     let old_size = window.rendered_size();
@@ -118,6 +122,7 @@ pub fn arrange_windows(wm: &mut WindowManager) -> () {
   arrange_windows_workspace(wm, wm.active_workspace);
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Direction {
   Left,
   Right,
@@ -135,22 +140,32 @@ pub fn naviate_last(wm: &mut WindowManager) {
   }
 }
 
+pub fn get_tiled_window(wm: &WindowManager, window_id: Id, direction: Direction) -> Option<Id> {
+  let window = wm.get_window(window_id);
+  let workspace = wm.get_workspace(window.workspace);
+  let tiled_windows = workspace.get_tiled_windows(wm);
+  let index = workspace
+    .get_tiled_window_index(wm, window_id)
+    .expect("Active window not found in active workspace") as isize;
+  let index = match direction {
+    Direction::Left => index - 1,
+    Direction::Right => index + 1,
+  };
+
+  if index < 0 {
+    None
+  } else {
+    tiled_windows.get(index as usize).cloned()
+  }
+}
+
 pub fn naviate(wm: &mut WindowManager, direction: Direction) {
   if let Some(active_window) = wm.active_window {
     if wm.get_window(active_window).is_tiled() {
-      let workspace = wm.active_workspace();
-      let tiled_windows = workspace.get_tiled_windows(wm);
-      let index = workspace
-        .get_tiled_window_index(wm, active_window)
-        .expect("Active window not found in active workspace") as isize;
-      let index = match direction {
-        Direction::Left => index - 1,
-        Direction::Right => index + 1,
-      };
-      if index < 0 || index > tiled_windows.len() as isize - 1 {
+      if let Some(other_window) = get_tiled_window(wm, active_window, direction) {
+        wm.focus_window(Some(other_window));
+      } else {
         naviate_monitor(wm, direction, Activation::FromDirection);
-      } else if let Some(window_id) = tiled_windows.get(index as usize) {
-        wm.focus_window(Some(*window_id));
       }
     }
   } else {
@@ -164,30 +179,15 @@ pub fn naviate(wm: &mut WindowManager, direction: Direction) {
 pub fn move_window(wm: &mut WindowManager, direction: Direction) {
   if let Some(active_window) = wm.active_window {
     if wm.get_window(active_window).is_tiled() {
-      let workspace = wm.active_workspace();
-      let tiled_windows = workspace.get_tiled_windows(wm);
-      let raw_index = workspace
-        .get_window_index(active_window)
-        .expect("Active window not found in active workspace");
-      let tiled_index = workspace
-        .get_tiled_window_index(wm, active_window)
-        .expect("Active window not found in active workspace") as isize;
-      let tiled_index = match direction {
-        Direction::Left => tiled_index - 1,
-        Direction::Right => tiled_index + 1,
-      };
-      if tiled_index < 0 || tiled_index > tiled_windows.len() as isize - 1 {
-        move_window_monitor(wm, direction, Activation::FromDirection);
-      } else if let Some(new_raw_index) = tiled_windows
-        .get(tiled_index as usize)
-        .and_then(|id| workspace.get_window_index(*id))
-      {
+      if let Some(other_window) = get_tiled_window(wm, active_window, direction) {
+        let workspace_id = wm.get_window(active_window).workspace;
         wm.workspaces
-          .get_mut(&wm.active_workspace)
-          .expect("move window active workspace")
-          .windows
-          .swap(raw_index, new_raw_index);
+          .get_mut(&workspace_id)
+          .unwrap()
+          .swap_windows(active_window, other_window);
         arrange_windows(wm);
+      } else {
+        move_window_monitor(wm, direction, Activation::FromDirection);
       }
     }
   }
@@ -348,16 +348,16 @@ pub fn apply_resize_by(wm: &mut WindowManager, displacement: Displacement) -> ()
       new_size.height = old_size.height + displacement.dy;
     }
 
-    let window = wm.windows.get_mut(&gesture.window).unwrap();
-    if new_pos != old_pos {
-      window.move_to(new_pos.x, new_pos.y);
+    // let window = wm.windows.get_mut(&gesture.window).unwrap();
+    let window_id = gesture.window;
+    let workspace_id = wm.get_window(window_id).workspace;
+    if new_pos != old_pos || new_size != old_size {
+      if new_size != old_size {
+        let window = wm.windows.get_mut(&window_id).unwrap();
+        window.resize(new_size);
+      }
+      arrange_windows_workspace(wm, workspace_id);
     }
-    if new_size != old_size {
-      window.resize(new_size);
-      new_pos.x -= window.size.width - new_size.width;
-      new_pos.y -= window.size.height - new_size.height;
-    }
-    let window_id = window.id;
     if wm.active_window != Some(window_id) {
       wm.focus_window(Some(window_id));
     }

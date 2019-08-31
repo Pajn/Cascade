@@ -191,6 +191,24 @@ pub struct Displacement {
   pub dy: i32,
 }
 
+impl From<mir::geometry::Displacement> for Displacement {
+  fn from(displacement: mir::geometry::Displacement) -> Displacement {
+    Displacement {
+      dx: displacement.dx.value,
+      dy: displacement.dy.value,
+    }
+  }
+}
+
+impl From<Displacement> for mir::geometry::Displacement {
+  fn from(displacement: Displacement) -> mir::geometry::Displacement {
+    mir::geometry::Displacement {
+      dx: mir::geometry::detail::IntWrapper { value: displacement.dx },
+      dy: mir::geometry::detail::IntWrapper { value: displacement.dy },
+    }
+  }
+}
+
 impl Sub<Point> for Point {
   type Output = Displacement;
 

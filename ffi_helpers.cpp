@@ -28,7 +28,6 @@ extern "C" void*get_window_at(miral::WindowManagerTools* tools, mir::geometry::P
 
 extern "C" void select_active_window(miral::WindowManagerTools* tools, miral::Window const* hint)
 {
-    printf("tools %p, hint: %p\n", (void*) tools, (void*) hint);
     if (hint == NULL) {
         tools->select_active_window(miral::Window {});
     } else {

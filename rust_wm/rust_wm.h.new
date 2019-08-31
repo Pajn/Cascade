@@ -42,10 +42,10 @@ bool handle_keyboard_event(WindowManager *wm, const MirKeyboardEvent *event);
 bool handle_pointer_event(WindowManager *wm, const MirPointerEvent *event);
 
 void handle_request_move(WindowManager *wm,
-                         WindowInfo *_window_info,
-                         const MirInputEvent *_input_event);
+                         WindowInfo *window_info,
+                         const MirInputEvent *input_event);
 
-bool handle_request_resize(WindowManager *wm,
+void handle_request_resize(WindowManager *wm,
                            WindowInfo *window_info,
                            const MirInputEvent *input_event,
                            Type edge);

@@ -31,6 +31,7 @@ pub struct Window {
   pub x: i32,
   pub y: i32,
   pub size: Size,
+  pub is_dragged: bool,
 }
 
 impl Window {
@@ -49,6 +50,7 @@ impl Window {
         width: 0,
         height: 0,
       },
+      is_dragged: false,
     }
   }
 
@@ -184,6 +186,12 @@ impl Workspace {
       .enumerate()
       .find(|(_, w)| **w == window)
       .map(|(index, _)| index)
+  }
+
+  pub fn swap_windows(&mut self, a: Id, b: Id) {
+    let a_raw_index = self.get_window_index(a).unwrap();
+    let b_raw_index = self.get_window_index(b).unwrap();
+    self.windows.swap(a_raw_index, b_raw_index);
   }
 }
 
