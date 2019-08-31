@@ -1,6 +1,7 @@
 use crate::actions::*;
 use crate::entities::*;
 use mir_rs::*;
+use std::process::Command;
 use xkbcommon::xkb;
 
 pub fn handle_key_press(
@@ -72,6 +73,12 @@ pub fn handle_key_press(
           | input_event_modifier::SHIFT_LEFT =>
     {
       move_window_monitor(wm, Direction::Right, Activation::LastActive);
+      true
+    }
+    xkb::KEY_a if modifiers == input_event_modifier::META_LEFT => {
+      Command::new("ulauncher-toggle")
+        .spawn()
+        .expect("failed to execute process");
       true
     }
     xkb::KEY_r if modifiers == input_event_modifier::META_LEFT => {

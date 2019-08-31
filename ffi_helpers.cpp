@@ -1,6 +1,34 @@
 #include <miral/window_info.h>
 #include <miral/window_manager_tools.h>
 
+extern "C" const char* window_specification_name(miral::WindowSpecification& specification)
+{
+    if (specification.name().is_set()) {
+        return specification.name().value().c_str();
+    } else {
+        return nullptr;
+    }
+}
+
+extern "C" void* window_name(miral::WindowInfo& window_info)
+{
+    auto name = window_info.name();
+    auto name_ptr = std::make_shared<std::string>();
+    *name_ptr = name;
+    return static_cast<void*>(new std::shared_ptr<std::string>(name_ptr));
+}
+
+extern "C" const char* rust_get_string(std::shared_ptr<std::string> string)
+{
+    return string.get()->c_str();
+}
+
+extern "C" void rust_drop_string(void* ptr)
+{
+    std::shared_ptr<std::string> *value = static_cast<std::shared_ptr<std::string>*>(ptr);
+    delete value;
+}
+
 extern "C" bool window_specification_has_parent(miral::WindowSpecification& specification)
 {
     return specification.parent().is_set() && specification.parent().value().lock();
@@ -18,7 +46,7 @@ extern "C" void* get_active_window(miral::WindowManagerTools* tools)
     return static_cast<void*>(new std::shared_ptr<miral::Window>(window_ptr));
 }
 
-extern "C" void*get_window_at(miral::WindowManagerTools* tools, mir::geometry::Point cursor)
+extern "C" void* get_window_at(miral::WindowManagerTools* tools, mir::geometry::Point cursor)
 {
     auto window = tools->window_at(cursor);
     auto window_ptr = std::make_shared<miral::Window>();

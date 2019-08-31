@@ -54,6 +54,10 @@ impl Window {
     }
   }
 
+  pub fn name(&self) -> String {
+    unsafe { window_name(self.window_info).get() }
+  }
+
   pub fn x(&self) -> i32 {
     unsafe { (&*(*self.window_info).window()).top_left().x.value }
   }
@@ -129,7 +133,8 @@ impl Window {
   }
 
   pub fn is_tiled(&self) -> bool {
-    !self.has_parent()
+    self.name() != "Ulauncher window title"
+      && !self.has_parent()
       && (self.type_() == raw::MirWindowType::mir_window_type_normal
         || self.type_() == raw::MirWindowType::mir_window_type_freestyle)
       && self.state() != raw::MirWindowState::mir_window_state_fullscreen

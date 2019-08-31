@@ -109,6 +109,7 @@ int main(int argc, char const* argv[])
         };
 
 
+    runner.add_start_callback([&] { external_client_launcher.launch({"ulauncher", "--hide-window"}); });
     runner.add_stop_callback([&] { wallpaper.stop(); });
     runner.add_stop_callback([&] { launcher.stop(); });
 

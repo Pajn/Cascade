@@ -1,11 +1,14 @@
 use mir_rs::*;
-
-#[derive(Clone)]
-#[repr(C)]
-pub struct SharedPtrWindow(*mut miral::Window);
+use std::ffi::CStr;
+use std::os::raw::c_char;
 
 #[allow(unused)]
 extern "C" {
+  pub fn window_specification_name(window_info: *const miral::WindowSpecification)
+    -> *const c_char;
+  pub fn window_name(window_info: *const miral::WindowInfo) -> SharedPtrString;
+  pub fn rust_get_string(value: SharedPtrString) -> *const c_char;
+  pub fn rust_drop_string(value: SharedPtrString) -> ();
   pub fn window_specification_has_parent(window_info: *const miral::WindowSpecification) -> bool;
   pub fn window_info_has_parent(window_info: *const miral::WindowInfo) -> bool;
   pub fn get_active_window(tools: *const miral::WindowManagerTools) -> SharedPtrWindow;
@@ -20,6 +23,27 @@ extern "C" {
   pub fn rust_get_window(value: SharedPtrWindow) -> *mut miral::Window;
   pub fn rust_drop_window(value: SharedPtrWindow) -> ();
 }
+
+#[derive(Clone)]
+#[repr(C)]
+pub struct SharedPtrString(*const raw::std::string);
+
+#[allow(unused)]
+impl SharedPtrString {
+  pub fn get(&self) -> String {
+    unsafe { to_string(rust_get_string(self.clone())) }
+  }
+}
+
+impl Drop for SharedPtrString {
+  fn drop(&mut self) {
+    unsafe { rust_drop_string(self.clone()) };
+  }
+}
+
+#[derive(Clone)]
+#[repr(C)]
+pub struct SharedPtrWindow(*mut miral::Window);
 
 #[allow(unused)]
 impl SharedPtrWindow {
@@ -36,4 +60,8 @@ impl Drop for SharedPtrWindow {
   fn drop(&mut self) {
     unsafe { rust_drop_window(self.clone()) };
   }
+}
+
+pub fn to_string(string: *const c_char) -> String {
+  unsafe { CStr::from_ptr(string).to_string_lossy().to_string() }
 }

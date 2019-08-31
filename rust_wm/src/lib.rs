@@ -25,8 +25,15 @@ fn is_tiled(window: &miral::WindowSpecification) -> bool {
       .copied()
       .unwrap_or(raw::MirWindowState::mir_window_state_unknown)
   };
+  let name = unsafe {
+    window_specification_name(window)
+      .as_ref()
+      .map(|a| to_string(a))
+  };
+  println!("name: {:?}", name);
 
-  !has_parent
+  name != Some("Ulauncher window title".to_owned())
+    && !has_parent
     && (type_ == raw::MirWindowType::mir_window_type_normal
       || type_ == raw::MirWindowType::mir_window_type_freestyle)
     && state != raw::MirWindowState::mir_window_state_fullscreen
@@ -100,6 +107,7 @@ pub extern "C" fn handle_window_ready(
   window.x = window.x();
   window.y = window.y();
   window.size = window.rendered_size();
+  println!("handle_window_ready name: {:?}", window.name());
 
   let type_ = unsafe { window_info.type_() };
   let has_parent = unsafe { window_info_has_parent(window_info) };
