@@ -40,9 +40,13 @@ pub extern "C" fn init_wm(tools: *mut miral::WindowManagerTools) -> *mut WindowM
     monitor_id_generator: IdGenerator::new(),
     window_id_generator: IdGenerator::new(),
     workspace_id_generator: IdGenerator::new(),
+
     monitors: BTreeMap::new(),
     windows: BTreeMap::new(),
     workspaces: BTreeMap::new(),
+
+    old_cursor: Point { x: 0, y: 0 },
+    gesture: Gesture::None,
     active_window: None,
     active_workspace: 0,
   };
@@ -329,6 +333,100 @@ pub extern "C" fn handle_keyboard_event(
   } else {
     false
   }
+}
+
+#[no_mangle]
+pub extern "C" fn handle_pointer_event(
+  wm: *mut WindowManager,
+  event: *const raw::MirPointerEvent,
+) -> bool {
+  let wm = unsafe { &mut *wm };
+
+  let action = unsafe { raw::mir_pointer_event_action(event) };
+
+  let new_cursor = Point {
+    x: unsafe { raw::mir_pointer_event_axis_value(event, raw::MirPointerAxis::mir_pointer_axis_x) }
+      as i32,
+    y: unsafe { raw::mir_pointer_event_axis_value(event, raw::MirPointerAxis::mir_pointer_axis_y) }
+      as i32,
+  };
+  let buttons = unsafe { raw::mir_pointer_event_buttons(event) };
+  let modifiers = unsafe { raw::mir_pointer_event_modifiers(event) };
+
+  let consume_event = match wm.gesture {
+    Gesture::Resize(ref gesture) => {
+      if action == raw::MirPointerAction::mir_pointer_action_motion
+        && buttons == gesture.buttons
+        && modifiers == gesture.modifiers
+      {
+        apply_resize_by(wm, new_cursor - wm.old_cursor);
+        true
+      } else {
+        wm.gesture = Gesture::None;
+        false
+      }
+    }
+    _ => false,
+  };
+
+  if !consume_event && action == raw::MirPointerAction::mir_pointer_action_button_down {
+    let window = unsafe { get_window_at(wm.tools, new_cursor.into()) };
+    if let Some(window) = window.get_opt() {
+      unsafe { select_active_window(wm.tools, window) };
+    }
+  }
+
+  wm.old_cursor = new_cursor;
+  consume_event
+}
+
+#[no_mangle]
+pub extern "C" fn handle_request_move(
+  wm: *mut WindowManager,
+  _window_info: *mut miral::WindowInfo,
+  _input_event: *const raw::MirInputEvent,
+) -> () {
+  let _wm = unsafe { &mut *wm };
+}
+
+#[no_mangle]
+pub extern "C" fn handle_request_resize(
+  wm: *mut WindowManager,
+  window_info: *mut miral::WindowInfo,
+  input_event: *const raw::MirInputEvent,
+  edge: raw::MirResizeEdge::Type,
+) -> bool {
+  let wm = unsafe { &mut *wm };
+
+  let input_event_type = unsafe { raw::mir_input_event_get_type(input_event) };
+  if input_event_type != raw::MirInputEventType::mir_input_event_type_pointer {
+    return false;
+  }
+
+  if let Some(window) = wm.window_by_info(window_info) {
+    if window.state() != raw::MirWindowState::mir_window_state_restored {
+      return false;
+    }
+
+    let pointer_event = unsafe { raw::mir_input_event_get_pointer_event(input_event) };
+    let buttons = unsafe { raw::mir_pointer_event_buttons(pointer_event) };
+    let modifiers = unsafe { raw::mir_pointer_event_modifiers(pointer_event) };
+
+    wm.gesture = Gesture::Resize(ResizeGesture {
+      window: window.id,
+      buttons,
+      modifiers,
+      top_left: window.rendered_top_left(),
+      size: window.rendered_size(),
+      edge,
+    });
+
+    println!("Start resize: {:?}", wm.gesture);
+  } else {
+    println!("handle_request_resize window not found");
+  }
+
+  false
 }
 
 #[cfg(test)]

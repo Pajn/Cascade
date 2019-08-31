@@ -1,6 +1,7 @@
 use crate::entities::*;
 use std::cmp;
 use std::cmp::Ordering;
+use mir_rs::*;
 
 fn update_cached_positions(wm: &mut WindowManager, workspace_id: Id) -> () {
   let monitor = wm.monitor_by_workspace(workspace_id);
@@ -300,6 +301,69 @@ pub fn move_window_monitor(wm: &mut WindowManager, direction: Direction, activat
         // TODO: This should not happen
         println!("Active window was on workspace that was not on any monitor")
       }
+    }
+  }
+}
+
+pub fn apply_resize_by(wm: &mut WindowManager, displacement: Displacement) -> () {
+  if let Gesture::Resize(ref gesture) = wm.gesture {
+    let old_pos = gesture.top_left;
+    let old_size = gesture.size;
+    let mut new_pos = old_pos.clone();
+    let mut new_size = old_size.clone();
+
+    if gesture.edge
+      & (raw::MirResizeEdge::mir_resize_edge_west | raw::MirResizeEdge::mir_resize_edge_east)
+      > 0
+    {}
+
+    if gesture.edge & raw::MirResizeEdge::mir_resize_edge_east > 0 {
+      new_size.width = old_size.width + displacement.dx;
+    }
+
+    if gesture.edge & raw::MirResizeEdge::mir_resize_edge_west > 0 {
+      let requested_width = old_size.width - displacement.dx;
+      let window = wm.get_window(gesture.window);
+
+      new_size.width = cmp::max(
+        cmp::min(requested_width, window.max_width()),
+        window.min_width(),
+      );
+      new_pos.x = old_pos.x + displacement.dx + (requested_width - new_size.width);
+
+      let window_is_tiled = window.is_tiled();
+      if window_is_tiled {
+        let workspace_id = window.workspace;
+        let workspace = wm.workspaces.get_mut(&workspace_id).unwrap();
+        workspace.scroll_left -= displacement.dx;
+      }
+    }
+
+    if gesture.edge & raw::MirResizeEdge::mir_resize_edge_north > 0 {
+      new_size.height = old_size.height - displacement.dy;
+      new_pos.y = old_pos.y + displacement.dy;
+    }
+
+    if gesture.edge & raw::MirResizeEdge::mir_resize_edge_south > 0 {
+      new_size.height = old_size.height + displacement.dy;
+    }
+
+    let window = wm.windows.get_mut(&gesture.window).unwrap();
+    if new_pos != old_pos {
+      window.move_to(new_pos.x, new_pos.y);
+    }
+    if new_size != old_size {
+      window.resize(new_size);
+      new_pos.x -= window.size.width - new_size.width;
+      new_pos.y -= window.size.height - new_size.height;
+    }
+    let window_id = window.id;
+    if wm.active_window != Some(window_id) {
+      wm.focus_window(Some(window_id));
+    }
+    if let Gesture::Resize(ref mut gesture) = wm.gesture {
+      gesture.top_left = new_pos;
+      gesture.size = new_size;
     }
   }
 }

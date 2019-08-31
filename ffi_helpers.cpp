@@ -18,6 +18,14 @@ extern "C" void* get_active_window(miral::WindowManagerTools* tools)
     return static_cast<void*>(new std::shared_ptr<miral::Window>(window_ptr));
 }
 
+extern "C" void*get_window_at(miral::WindowManagerTools* tools, mir::geometry::Point cursor)
+{
+    auto window = tools->window_at(cursor);
+    auto window_ptr = std::make_shared<miral::Window>();
+    *window_ptr = window;
+    return static_cast<void*>(new std::shared_ptr<miral::Window>(window_ptr));
+}
+
 extern "C" void select_active_window(miral::WindowManagerTools* tools, miral::Window const* hint)
 {
     printf("tools %p, hint: %p\n", (void*) tools, (void*) hint);

@@ -41,10 +41,19 @@ public:
         -> WindowSpecification override;
 
     void handle_window_ready(WindowInfo& window_info) override;
-    bool handle_keyboard_event(MirKeyboardEvent const* event) override;
-    void advise_focus_gained(WindowInfo const& window_info) override;
-    void advise_delete_window(WindowInfo const& window_info) override;
     void handle_modify_window(WindowInfo& window_info, WindowSpecification const& modifications) override;
+    void advise_delete_window(WindowInfo const& window_info) override;
+
+    bool handle_keyboard_event(MirKeyboardEvent const* event) override;
+    /// Handles pre-existing move & resize gestures, plus click to focus
+    bool handle_pointer_event(MirPointerEvent const* event) override;
+
+    /// Initiates a move gesture (only implemented for pointers)
+    void handle_request_move(WindowInfo& window_info, MirInputEvent const* input_event) override;
+    /// Initiates a resize gesture (only implemented for pointers)
+    void handle_request_resize(WindowInfo& window_info, MirInputEvent const* input_event, MirResizeEdge edge) override;
+
+    void advise_focus_gained(WindowInfo const& window_info) override;
 
     void advise_output_create(Output const& output) override;
     void advise_output_update(Output const& updated, Output const& original) override;

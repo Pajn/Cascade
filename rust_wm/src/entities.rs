@@ -31,7 +31,6 @@ pub struct Window {
   pub x: i32,
   pub y: i32,
   pub size: Size,
-  pub has_parent: bool,
 }
 
 impl Window {
@@ -50,7 +49,6 @@ impl Window {
         width: 0,
         height: 0,
       },
-      has_parent: unsafe { window_info_has_parent(window_info) },
     }
   }
 
@@ -68,6 +66,13 @@ impl Window {
 
   pub fn height(&self) -> i32 {
     unsafe { (*(*self.window_info).window()).size().height.value }
+  }
+
+  pub fn rendered_top_left(&self) -> Point {
+    Point {
+      x: self.x(),
+      y: self.y(),
+    }
   }
 
   pub fn rendered_size(&self) -> Size {
@@ -109,23 +114,24 @@ impl Window {
     unsafe { (*(*self.window_info).window()).move_to(mir::geometry::Point::new(x, y)) }
   }
 
+  pub fn type_(&self) -> raw::MirWindowType::Type {
+    unsafe { (*self.window_info).type_() }
+  }
+
+  pub fn state(&self) -> raw::MirWindowState::Type {
+    unsafe { (*self.window_info).state() }
+  }
+
+  pub fn has_parent(&self) -> bool {
+    unsafe { window_info_has_parent(self.window_info) }
+  }
+
   pub fn is_tiled(&self) -> bool {
-    // unsafe {
-    //   println!(
-    //     "is_tiled {} {}, {}, {}",
-    //     self.id,
-    //     (*self.window_info).type_(),
-    //     (*self.window_info).state(),
-    //     (*self.window_info).type_()
-    //   )
-    // };
-    unsafe {
-      !window_info_has_parent(self.window_info)
-        && ((*self.window_info).type_() == raw::MirWindowType::mir_window_type_normal
-          || (*self.window_info).type_() == raw::MirWindowType::mir_window_type_freestyle)
-        && (*self.window_info).state() != raw::MirWindowState::mir_window_state_fullscreen
-        && (*self.window_info).state() != raw::MirWindowState::mir_window_state_attached
-    }
+    !self.has_parent()
+      && (self.type_() == raw::MirWindowType::mir_window_type_normal
+        || self.type_() == raw::MirWindowType::mir_window_type_freestyle)
+      && self.state() != raw::MirWindowState::mir_window_state_fullscreen
+      && self.state() != raw::MirWindowState::mir_window_state_attached
   }
 
   pub fn ask_client_to_close(&self, wm: &WindowManager) -> () {
@@ -199,6 +205,31 @@ impl Monitor {
 }
 
 #[derive(Debug)]
+pub struct ResizeGesture {
+  pub window: Id,
+  pub buttons: raw::MirPointerButtons,
+  pub modifiers: input_event_modifier::Type,
+  pub top_left: Point,
+  pub size: Size,
+  pub edge: raw::MirResizeEdge::Type,
+}
+
+#[derive(Debug)]
+pub struct MoveGesture {
+  pub window: Id,
+  pub buttons: raw::MirPointerButtons,
+  pub modifiers: input_event_modifier::Type,
+  pub top_left: Point,
+}
+
+#[derive(Debug)]
+pub enum Gesture {
+  Resize(ResizeGesture),
+  Move(MoveGesture),
+  None,
+}
+
+#[derive(Debug)]
 pub struct WindowManager {
   pub tools: *mut miral::WindowManagerTools,
   pub monitor_id_generator: IdGenerator,
@@ -208,6 +239,9 @@ pub struct WindowManager {
   pub monitors: BTreeMap<Id, Monitor>,
   pub windows: BTreeMap<Id, Window>,
   pub workspaces: BTreeMap<Id, Workspace>,
+
+  pub old_cursor: Point,
+  pub gesture: Gesture,
   pub active_window: Option<Id>,
   pub active_workspace: Id,
 }
@@ -308,7 +342,7 @@ impl WindowManager {
     }
 
     let window_id = window.id;
-    let window_has_parent = window.has_parent;
+    let window_has_parent = window.has_parent();
     self.windows.insert(window.id, window);
 
     if !window_has_parent {

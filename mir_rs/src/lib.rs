@@ -3,6 +3,7 @@ mod ffi;
 pub use ffi::root as raw;
 pub use ffi::root::{mir, miral};
 use xkbcommon::xkb;
+use std::ops::Sub;
 
 pub trait AsOption<T> {
   fn as_ref(&self) -> Option<&T>;
@@ -180,6 +181,23 @@ impl From<Rectangle> for mir::geometry::Rectangle {
     mir::geometry::Rectangle {
       top_left: rectangle.top_left.into(),
       size: rectangle.size.into(),
+    }
+  }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Displacement {
+  pub dx: i32,
+  pub dy: i32,
+}
+
+impl Sub<Point> for Point {
+  type Output = Displacement;
+
+  fn sub(self, other: Self) -> Self::Output {
+    Displacement {
+      dx: self.x - other.x,
+      dy: self.y - other.y,
     }
   }
 }

@@ -100,6 +100,18 @@ bool egmde::WindowManagerPolicy::handle_keyboard_event(MirKeyboardEvent const* e
     return rust::handle_keyboard_event(wm, event) 
         || MinimalWindowManager::handle_keyboard_event(event);
 }
+bool egmde::WindowManagerPolicy::handle_pointer_event(MirPointerEvent const* event)
+{
+    return rust::handle_pointer_event(wm, event);
+}
+void egmde::WindowManagerPolicy::handle_request_move(WindowInfo& window_info, MirInputEvent const* input_event)
+{
+    rust::handle_request_move(wm, &window_info, input_event);
+}
+void egmde::WindowManagerPolicy::handle_request_resize(WindowInfo& window_info, MirInputEvent const* input_event, MirResizeEdge edge)
+{
+    rust::handle_request_resize(wm, &window_info, input_event, edge);
+}
 
 void egmde::WindowManagerPolicy::handle_window_ready(WindowInfo& window_info)
 {

@@ -23,21 +23,32 @@ extern "C" {
 
 void advise_application_zone_create(WindowManager *wm, const Zone *zone);
 
-void advise_application_zone_delete(WindowManager *wm, const Zone *_zone);
+void advise_application_zone_delete(WindowManager *wm, const Zone *zone);
 
-void advise_application_zone_update(WindowManager *wm, const Zone *updated, const Zone *_original);
+void advise_application_zone_update(WindowManager *wm, const Zone *updated, const Zone *original);
 
 void advise_delete_window(WindowManager *wm, const WindowInfo *window_info);
 
 void advise_focus_gained(WindowManager *wm, const WindowInfo *window_info);
 
-void advise_output_create(WindowManager *wm, const Output *output);
+void advise_output_create(WindowManager *_wm, const Output *_output);
 
-void advise_output_delete(WindowManager *wm, const Output *output);
+void advise_output_delete(WindowManager *_wm, const Output *_output);
 
-void advise_output_update(WindowManager *wm, const Output *updated, const Output *original);
+void advise_output_update(WindowManager *_wm, const Output *_updated, const Output *_original);
 
 bool handle_keyboard_event(WindowManager *wm, const MirKeyboardEvent *event);
+
+bool handle_pointer_event(WindowManager *wm, const MirPointerEvent *event);
+
+void handle_request_move(WindowManager *wm,
+                         WindowInfo *_window_info,
+                         const MirInputEvent *_input_event);
+
+bool handle_request_resize(WindowManager *wm,
+                           WindowInfo *window_info,
+                           const MirInputEvent *input_event,
+                           Type edge);
 
 void handle_window_ready(WindowManager *wm, WindowInfo *window_info);
 
