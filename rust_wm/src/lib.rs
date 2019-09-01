@@ -381,11 +381,6 @@ pub extern "C" fn handle_pointer_event(
 ) -> bool {
   let wm = unsafe { &mut *wm };
 
-  if wm.input_inhibitor.is_inhibited() {
-    // TODO: Block events over other clients
-    return false;
-  }
-
   let action = unsafe { raw::mir_pointer_event_action(event) };
 
   let new_cursor = Point {
@@ -396,6 +391,17 @@ pub extern "C" fn handle_pointer_event(
   };
   let buttons = unsafe { raw::mir_pointer_event_buttons(event) };
   let modifiers = unsafe { raw::mir_pointer_event_modifiers(event) };
+
+  if wm.input_inhibitor.is_inhibited() {
+    let window = unsafe { get_window_at(wm.tools, new_cursor.into()) };
+    let window = unsafe { (*wm.tools).info_for2(window.get()) };
+
+    if let Some(window) = wm.window_by_info(window) {
+      if !wm.input_inhibitor.is_allowed(window) {
+        return true;
+      }
+    }
+  }
 
   let consume_event = match wm.gesture {
     Gesture::Move(ref gesture) => {
