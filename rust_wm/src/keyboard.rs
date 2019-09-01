@@ -16,6 +16,10 @@ pub fn handle_key_press(
 
   let modifiers = modifiers & modifier_mask;
 
+  if wm.input_inhibitor.is_inhibited() {
+    return false;
+  }
+
   match key_code {
     xkb::KEY_Home if modifiers == input_event_modifier::META_LEFT => {
       naviate_first(wm);

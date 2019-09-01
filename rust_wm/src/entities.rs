@@ -1,4 +1,5 @@
 use crate::ffi_helpers::*;
+use crate::input_inhibitor::{focus_exclusive_client, InputInhibitor};
 use mir_rs::*;
 use std::cmp;
 use std::collections::BTreeMap;
@@ -245,6 +246,7 @@ pub enum Gesture {
 #[derive(Debug)]
 pub struct WindowManager {
   pub tools: *mut miral::WindowManagerTools,
+  pub input_inhibitor: Box<InputInhibitor>,
   pub monitor_id_generator: IdGenerator,
   pub window_id_generator: IdGenerator,
   pub workspace_id_generator: IdGenerator,
@@ -355,15 +357,21 @@ impl WindowManager {
     }
 
     let window_id = window.id;
-    let window_has_parent = window.has_parent();
     self.windows.insert(window.id, window);
 
-    if !window_has_parent {
-      self.activate_window(window_id);
+    let window = self.get_window(window_id);
+    if !window.has_parent() {
+      if self.input_inhibitor.is_allowed(&window) {
+        self.activate_window(window_id);
+      } else {
+        focus_exclusive_client(self);
+      }
     }
   }
 
   pub fn delete_window(&mut self, window_id: Id) -> () {
+    self.input_inhibitor.clear_if_dead();
+
     self
       .remove_window_from_workspace(window_id)
       .expect("nowindow in workspace advise_delete_window");
@@ -417,9 +425,13 @@ impl WindowManager {
     if let Some(window_id) = window_id {
       let window = self.get_window(window_id);
 
-      unsafe {
-        let window_ptr = (*window.window_info).window();
-        select_active_window(self.tools, window_ptr);
+      if self.input_inhibitor.is_allowed(window) {
+        unsafe {
+          let window_ptr = (*window.window_info).window();
+          select_active_window(self.tools, window_ptr);
+        }
+      } else {
+        focus_exclusive_client(self);
       }
     } else {
       unsafe {

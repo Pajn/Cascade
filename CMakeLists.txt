@@ -14,6 +14,47 @@ pkg_check_modules(WAYLAND_CLIENT REQUIRED wayland-client)
 pkg_check_modules(XKBCOMMON xkbcommon REQUIRED)
 find_package(Boost COMPONENTS filesystem REQUIRED)
 
+pkg_check_modules(MIRWAYLAND mirwayland REQUIRED)
+pkg_check_modules(WAYLAND_SERVER REQUIRED wayland-server)
+
+add_subdirectory(wayland-generated)
+
+add_library(cascade-wayland STATIC
+    wayland-generated/wlr-input-inhibitor-unstable-v1_wrapper.cpp
+    wayland-generated/wlr-input-inhibitor-unstable-v1_wrapper.h
+    wlr_input_inhibitor.cpp wlr_input_inhibitor.h
+)
+
+target_include_directories(cascade-wayland PUBLIC SYSTEM ${MIRAL_INCLUDE_DIRS} ${MIRWAYLAND_INCLUDE_DIRS})
+
+# enable_testing()
+# pkg_check_modules(MIRTEST mirtest REQUIRED)
+# pkg_get_variable(WLCS_BINARY wlcs test_runner)
+
+# add_library(cascade-wlcs MODULE
+#   wlcs_fixture.cpp)
+
+# target_include_directories(cascade-wlcs
+#   PUBLIC SYSTEM ${MIRTEST_INCLUDE_DIRS})
+
+# target_link_libraries(cascade-wlcs
+#   cascade-wayland
+#   ${MIRTEST_LIBRARIES}
+#   ${MIRWAYLAND_LDFLAGS}
+#   ${WAYLAND_CLIENT_LDFLAGS}
+#   ${WAYLAND_SERVER_LDFLAGS}
+# )
+
+# set_target_properties(cascade-wlcs
+#   PROPERTIES
+#   PREFIX ""
+# )
+
+# add_test(
+#   NAME wlcs
+#   COMMAND ${WLCS_BINARY} ${GTEST_FILTER} ${CMAKE_BINARY_DIR}/cascade-wlcs.so
+# )
+
 add_executable(cascade
     cascade.cpp
     eglauncher.cpp eglauncher.h
@@ -44,7 +85,16 @@ set_source_files_properties(cascade.cpp PROPERTIES COMPILE_DEFINITIONS CASCADE_W
 
 target_include_directories(cascade PUBLIC SYSTEM ${MIRAL_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS} ${FREETYPE_INCLUDE_DIRS})
 target_link_libraries(     cascade               ${MIRAL_LDFLAGS}      ${WAYLAND_CLIENT_LIBRARIES}  ${Boost_LIBRARIES}    ${FREETYPE_LIBRARIES})
-target_link_libraries(     cascade               ${XKBCOMMON_LIBRARIES})
+target_link_libraries(cascade
+  cascade-wayland
+  ${MIRAL_LDFLAGS}
+  ${MIRWAYLAND_LDFLAGS}
+  ${WAYLAND_CLIENT_LIBRARIES}
+  ${WAYLAND_SERVER_LDFLAGS}
+  ${Boost_LIBRARIES}
+  ${FREETYPE_LIBRARIES}
+  ${XKBCOMMON_LIBRARIES}
+)
 target_link_libraries(     cascade               ${CMAKE_BINARY_DIR}/../rust_wm/target/debug/librust_wm.so)
 
 

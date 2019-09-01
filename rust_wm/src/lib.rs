@@ -1,11 +1,13 @@
 mod actions;
 mod entities;
 mod ffi_helpers;
+mod input_inhibitor;
 mod keyboard;
 
 use crate::actions::*;
 use crate::entities::*;
 use crate::ffi_helpers::*;
+use crate::input_inhibitor::{focus_exclusive_client, InputInhibitor};
 use crate::keyboard::*;
 use mir_rs::*;
 use std::collections::BTreeMap;
@@ -41,9 +43,14 @@ fn is_tiled(window: &miral::WindowSpecification) -> bool {
 }
 
 #[no_mangle]
-pub extern "C" fn init_wm(tools: *mut miral::WindowManagerTools) -> *mut WindowManager {
+pub extern "C" fn init_wm(
+  tools: *mut miral::WindowManagerTools,
+  input_inhibitor: *mut InputInhibitor,
+) -> *mut WindowManager {
+  let input_inhibitor = unsafe { Box::from_raw(input_inhibitor) };
   let mut wm = WindowManager {
     tools,
+    input_inhibitor,
     monitor_id_generator: IdGenerator::new(),
     window_id_generator: IdGenerator::new(),
     workspace_id_generator: IdGenerator::new(),
@@ -126,17 +133,41 @@ pub extern "C" fn handle_window_ready(
 }
 
 #[no_mangle]
+pub extern "C" fn handle_raise_window(
+  wm: *mut WindowManager,
+  window_info: *const miral::WindowInfo,
+) -> () {
+  let wm = unsafe { &mut *wm };
+
+  if let Some(window) = wm.window_by_info(window_info) {
+    if wm.input_inhibitor.is_allowed(window) {
+      let window_id = window.id;
+      wm.focus_window(Some(window_id));
+    } else {
+      focus_exclusive_client(wm);
+    }
+  } else {
+    wm.focus_window(None);
+  }
+}
+
+#[no_mangle]
 pub extern "C" fn advise_focus_gained(
   wm: *mut WindowManager,
   window_info: *const miral::WindowInfo,
 ) -> () {
   let wm = unsafe { &mut *wm };
 
-  if let Some(window_id) = wm.window_by_info(window_info).map(|w| w.id) {
-    wm.activate_window(window_id);
+  if let Some(window) = wm.window_by_info(window_info) {
+    if wm.input_inhibitor.is_allowed(window) {
+      let window_id = window.id;
+      wm.activate_window(window_id);
 
-    ensure_window_visible(wm, window_id);
-    update_window_positions(wm, wm.get_window(window_id).workspace);
+      ensure_window_visible(wm, window_id);
+      update_window_positions(wm, wm.get_window(window_id).workspace);
+    } else {
+      focus_exclusive_client(wm);
+    }
   }
 }
 
@@ -361,6 +392,17 @@ pub extern "C" fn handle_pointer_event(
   let buttons = unsafe { raw::mir_pointer_event_buttons(event) };
   let modifiers = unsafe { raw::mir_pointer_event_modifiers(event) };
 
+  if wm.input_inhibitor.is_inhibited() {
+    let window = unsafe { get_window_at(wm.tools, new_cursor.into()) };
+    let window = unsafe { (*wm.tools).info_for2(window.get()) };
+
+    if let Some(window) = wm.window_by_info(window) {
+      if !wm.input_inhibitor.is_allowed(window) {
+        return true;
+      }
+    }
+  }
+
   let consume_event = match wm.gesture {
     Gesture::Move(ref gesture) => {
       if action == raw::MirPointerAction::mir_pointer_action_motion
@@ -467,6 +509,10 @@ fn handle_pointer_request(
   edge: raw::MirResizeEdge::Type,
   gesture_type: GestureType,
 ) -> bool {
+  if wm.input_inhibitor.is_inhibited() {
+    return false;
+  }
+
   let input_event_type = unsafe { raw::mir_input_event_get_type(input_event) };
   if input_event_type != raw::MirInputEventType::mir_input_event_type_pointer {
     return false;

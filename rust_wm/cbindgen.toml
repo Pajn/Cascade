@@ -26,6 +26,7 @@ sys_includes = [
   "miral/window_management_policy.h",
   "miral/window_manager_tools.h",
   "miral/window_specification.h",
+  "wayland-server-core.h",
 ]
 includes = ["fixes.h"]
 no_includes = false
@@ -69,6 +70,8 @@ exclude = [
   "rust_drop_window",
   "rust_get_window",
   "select_active_window",
+  "client_is_alive",
+  "client_owns_window",
 ]
 # prefix = "CAPI_"
 item_types = []
