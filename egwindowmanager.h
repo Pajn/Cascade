@@ -35,7 +35,7 @@ class WindowManagerPolicy :
     public WindowManagementPolicy::ApplicationZoneAddendum
 {
 public:
-    WindowManagerPolicy(WindowManagerTools const& tools, Wallpaper const& wallpaper, Launcher const& launcher);
+    WindowManagerPolicy(WindowManagerTools const& tools, rust::InputInhibitor* input_inhibitor, Wallpaper const& wallpaper, Launcher const& launcher);
 
     auto place_new_window(ApplicationInfo const& app_info, WindowSpecification const& request_parameters)
         -> WindowSpecification override;
@@ -53,6 +53,7 @@ public:
     /// Initiates a resize gesture (only implemented for pointers)
     void handle_request_resize(WindowInfo& window_info, MirInputEvent const* input_event, MirResizeEdge edge) override;
 
+    void handle_raise_window(WindowInfo& window_info) override;
     void advise_focus_gained(WindowInfo const& window_info) override;
 
     void advise_output_create(Output const& output) override;
@@ -64,8 +65,9 @@ public:
     void advise_application_zone_delete(miral::Zone const& zone) override;
 
 private:
-    rust::WindowManager* wm;
     std::shared_ptr<miral::WindowManagerTools> tools;
+    rust::WindowManager* wm;
+    rust::InputInhibitor* input_inhibitor;
     Wallpaper const* wallpaper;
     Launcher const* launcher;
 

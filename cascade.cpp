@@ -19,6 +19,8 @@
 #include "egwallpaper.h"
 #include "egwindowmanager.h"
 #include "eglauncher.h"
+#include "wlr_input_inhibitor.h"
+#include "rust_wm/rust_wm.h"
 
 #include <miral/append_event_filter.h>
 #include <miral/command_line_option.h>
@@ -113,10 +115,14 @@ int main(int argc, char const* argv[])
     runner.add_stop_callback([&] { wallpaper.stop(); });
     runner.add_stop_callback([&] { launcher.stop(); });
 
+    auto input_inhibitor = rust::input_inhibitor_new();
+    WaylandExtensions wayland_extensions;
+    wayland_extensions.add_extension(cascade::wlr_input_inhibitor_extension(input_inhibitor));
+
     return runner.run_with(
         {
             X11Support{},
-            WaylandExtensions{}
+            wayland_extensions
                 .enable(WaylandExtensions::zwlr_layer_shell_v1)
                 .enable(WaylandExtensions::zxdg_output_manager_v1),
             DisplayConfiguration{runner},
@@ -130,6 +136,6 @@ int main(int argc, char const* argv[])
             Keymap{},
             AppendEventFilter{keyboard_shortcuts},
             AppendEventFilter{touch_shortcuts},
-            set_window_management_policy<cascade::WindowManagerPolicy>(wallpaper, launcher)
+            set_window_management_policy<cascade::WindowManagerPolicy>(input_inhibitor, wallpaper, launcher)
         });
 }

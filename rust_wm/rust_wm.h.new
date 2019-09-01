@@ -13,9 +13,12 @@
 #include <miral/window_management_policy.h>
 #include <miral/window_manager_tools.h>
 #include <miral/window_specification.h>
+#include <wayland-server-core.h>
 #include "fixes.h"
 
 namespace rust {
+
+struct InputInhibitor;
 
 struct WindowManager;
 
@@ -41,6 +44,8 @@ bool handle_keyboard_event(WindowManager *wm, const MirKeyboardEvent *event);
 
 bool handle_pointer_event(WindowManager *wm, const MirPointerEvent *event);
 
+void handle_raise_window(WindowManager *wm, const WindowInfo *window_info);
+
 void handle_request_move(WindowManager *wm,
                          WindowInfo *window_info,
                          const MirInputEvent *input_event);
@@ -52,7 +57,13 @@ void handle_request_resize(WindowManager *wm,
 
 void handle_window_ready(WindowManager *wm, WindowInfo *window_info);
 
-WindowManager *init_wm(WindowManagerTools *tools);
+WindowManager *init_wm(WindowManagerTools *tools, InputInhibitor *input_inhibitor);
+
+void input_inhibitor_clear(InputInhibitor *inhibitor);
+
+InputInhibitor *input_inhibitor_new();
+
+void input_inhibitor_set(InputInhibitor *inhibitor, const wl_client *exclusive_client);
 
 void place_new_window(WindowManager *wm, WindowSpecification *window_specification);
 

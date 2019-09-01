@@ -22,6 +22,10 @@ extern "C" {
   ) -> ();
   pub fn rust_get_window(value: SharedPtrWindow) -> *mut miral::Window;
   pub fn rust_drop_window(value: SharedPtrWindow) -> ();
+  pub fn client_owns_window(
+    client: *const raw::wl_client,
+    window: *const miral::WindowInfo,
+  ) -> bool;
 }
 
 #[derive(Clone)]

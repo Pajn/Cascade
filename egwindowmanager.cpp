@@ -21,8 +21,12 @@
 #include "egwallpaper.h"
 #include "eglauncher.h"
 
+#include <string>
+#include <iostream>
+
 #include <miral/application_info.h>
 #include <miral/window_info.h>
+#include <miral/wayland_extensions.h>
 #include <miral/window_manager_tools.h>
 
 #include <linux/input.h>
@@ -68,13 +72,14 @@ void cascade::WindowManagerPolicy::keep_size_within_limits(
     }
 }
 
-cascade::WindowManagerPolicy::WindowManagerPolicy(WindowManagerTools const& tools, Wallpaper const& wallpaper, Launcher const& launcher) :
+cascade::WindowManagerPolicy::WindowManagerPolicy(WindowManagerTools const& tools, rust::InputInhibitor* input_inhibitor, Wallpaper const& wallpaper, Launcher const& launcher) :
     MinimalWindowManager{tools},
+    input_inhibitor{input_inhibitor},
     wallpaper{&wallpaper},
     launcher{&launcher}
 {
     this->tools = std::make_shared<WindowManagerTools>(tools);
-    wm = rust::init_wm(this->tools.get());
+    wm = rust::init_wm(this->tools.get(), this->input_inhibitor);
 }
 
 miral::WindowSpecification cascade::WindowManagerPolicy::place_new_window(
@@ -139,6 +144,10 @@ void cascade::WindowManagerPolicy::handle_request_resize(WindowInfo& window_info
 
 
 
+void cascade::WindowManagerPolicy::handle_raise_window(WindowInfo& window_info)
+{
+    rust::handle_raise_window(wm, &window_info);
+}
 void cascade::WindowManagerPolicy::advise_focus_gained(WindowInfo const& window_info)
 {
     MinimalWindowManager::advise_focus_gained(window_info);

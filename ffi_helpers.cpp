@@ -1,5 +1,7 @@
+#include <miral/wayland_extensions.h>
 #include <miral/window_info.h>
 #include <miral/window_manager_tools.h>
+#include <wayland-server-core.h>
 
 extern "C" const char* window_specification_name(miral::WindowSpecification& specification)
 {
@@ -72,4 +74,9 @@ extern "C" void rust_drop_window(void* ptr)
 {
     std::shared_ptr<miral::Window> *value = static_cast<std::shared_ptr<miral::Window>*>(ptr);
     delete value;
+}
+
+extern "C" bool client_owns_window(wl_client* client, miral::WindowInfo const* window)
+{
+    return miral::pid_of(miral::application_for(client)) == miral::pid_of(window->window().application());
 }
