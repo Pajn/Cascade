@@ -18,6 +18,12 @@ pub extern "C" fn input_inhibitor_new() -> *mut InputInhibitor {
 }
 
 #[no_mangle]
+pub extern "C" fn input_inhibitor_is_inhibited(inhibitor: *const InputInhibitor) -> bool {
+  let inhibitor = unsafe { &*inhibitor };
+  inhibitor.is_inhibited()
+}
+
+#[no_mangle]
 pub extern "C" fn input_inhibitor_set(
   inhibitor: *mut InputInhibitor,
   exclusive_client: *const wl_client,

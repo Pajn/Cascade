@@ -61,6 +61,8 @@ WindowManager *init_wm(WindowManagerTools *tools, InputInhibitor *input_inhibito
 
 void input_inhibitor_clear(InputInhibitor *inhibitor);
 
+bool input_inhibitor_is_inhibited(const InputInhibitor *inhibitor);
+
 InputInhibitor *input_inhibitor_new();
 
 void input_inhibitor_set(InputInhibitor *inhibitor, const wl_client *exclusive_client);

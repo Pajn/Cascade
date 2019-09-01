@@ -42,6 +42,7 @@ int main(int argc, char const* argv[])
 {
     MirRunner runner{argc, argv};
 
+    auto input_inhibitor = rust::input_inhibitor_new();
     cascade::Wallpaper wallpaper;
 
     ExternalClientLauncher external_client_launcher;
@@ -64,6 +65,9 @@ int main(int argc, char const* argv[])
             if (!(mods & mir_input_event_modifier_alt) || !(mods & mir_input_event_modifier_ctrl))
                 return false;
 
+            if (input_inhibitor_is_inhibited(input_inhibitor))
+                return false;
+
             switch (mir_keyboard_event_scan_code(kev))
             {
             case KEY_A:launcher.show();
@@ -78,44 +82,11 @@ int main(int argc, char const* argv[])
             }
         };
 
-    auto touch_shortcuts = [&, gesture = false](MirEvent const* event) mutable
-        {
-            if (mir_event_get_type(event) != mir_event_type_input)
-                return false;
-
-            auto const* input_event = mir_event_get_input_event(event);
-            if (mir_input_event_get_type(input_event) != mir_input_event_type_touch)
-                return false;
-
-            auto const* tev = mir_input_event_get_touch_event(input_event);
-
-            if (gesture)
-            {
-                if (mir_touch_event_action(tev, 0) == mir_touch_action_up)
-                    gesture = false;
-                return true;
-            }
-
-            if (mir_touch_event_point_count(tev) != 1)
-                return false;
-
-            if (mir_touch_event_action(tev, 0) != mir_touch_action_down)
-                return false;
-
-            if (mir_touch_event_axis_value(tev, 0, mir_touch_axis_x) >= 5)
-                return false;
-
-            launcher.show();
-            gesture = true;
-            return true;
-        };
-
 
     runner.add_start_callback([&] { external_client_launcher.launch({"ulauncher", "--hide-window"}); });
     runner.add_stop_callback([&] { wallpaper.stop(); });
     runner.add_stop_callback([&] { launcher.stop(); });
 
-    auto input_inhibitor = rust::input_inhibitor_new();
     WaylandExtensions wayland_extensions;
     wayland_extensions.add_extension(cascade::wlr_input_inhibitor_extension(input_inhibitor));
 
@@ -135,7 +106,6 @@ int main(int argc, char const* argv[])
             StartupInternalClient{std::ref(launcher)},
             Keymap{},
             AppendEventFilter{keyboard_shortcuts},
-            AppendEventFilter{touch_shortcuts},
             set_window_management_policy<cascade::WindowManagerPolicy>(input_inhibitor, wallpaper, launcher)
         });
 }
