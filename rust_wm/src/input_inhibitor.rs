@@ -45,17 +45,13 @@ impl InputInhibitor {
       None => true,
     }
   }
-  pub fn is_excluse(&self, window: &Window) -> bool {
-    match self.exclusive_client {
-      Some(exclusive_client) => {
-        let is_owned = unsafe { client_owns_window(exclusive_client, window.window_info) };
-        is_owned
+  pub fn clear_if_dead(&mut self) {
+    if let Some(exclusive_client) = self.exclusive_client {
+      let is_alive = unsafe { client_is_alive(exclusive_client) };
+      if !is_alive {
+        self.exclusive_client = None;
       }
-      None => false,
     }
-  }
-  pub fn clear(&mut self) {
-    self.exclusive_client = None;
   }
 }
 

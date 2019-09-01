@@ -70,6 +70,7 @@ exclude = [
   "rust_drop_window",
   "rust_get_window",
   "select_active_window",
+  "client_is_alive",
   "client_owns_window",
 ]
 # prefix = "CAPI_"

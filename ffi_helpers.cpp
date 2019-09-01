@@ -76,6 +76,11 @@ extern "C" void rust_drop_window(void* ptr)
     delete value;
 }
 
+extern "C" bool client_is_alive(wl_client* client)
+{
+    return miral::application_for(client) != NULL;
+}
+
 extern "C" bool client_owns_window(wl_client* client, miral::WindowInfo const* window)
 {
     return miral::pid_of(miral::application_for(client)) == miral::pid_of(window->window().application());

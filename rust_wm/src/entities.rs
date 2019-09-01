@@ -370,11 +370,7 @@ impl WindowManager {
   }
 
   pub fn delete_window(&mut self, window_id: Id) -> () {
-    let window = self.get_window(window_id);
-
-    if self.input_inhibitor.is_excluse(window) {
-      self.input_inhibitor.clear();
-    }
+    self.input_inhibitor.clear_if_dead();
 
     self
       .remove_window_from_workspace(window_id)
