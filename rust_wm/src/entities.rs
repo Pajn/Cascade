@@ -259,6 +259,7 @@ pub struct WindowManager {
   pub gesture: Gesture,
   pub active_window: Option<Id>,
   pub active_workspace: Id,
+  pub new_window_workspace: Id,
 }
 
 impl WindowManager {
@@ -308,6 +309,13 @@ impl WindowManager {
       .expect("Active workspace not found")
   }
 
+  pub fn new_window_workspace(&self) -> &Workspace {
+    self
+      .workspaces
+      .get(&self.new_window_workspace)
+      .expect("New window workspace not found")
+  }
+
   pub fn get_or_create_unused_workspace(&mut self) -> Id {
     let unused_workspaces = self
       .workspaces
@@ -347,10 +355,10 @@ impl WindowManager {
     println!("WM: {:?}, adding: {:?}", &self, &window);
     let workspace = self.workspaces.get_mut(&window.workspace).unwrap();
 
-    if let Some(active_window) = self.active_window {
-      let index = workspace
-        .get_window_index(active_window)
-        .expect("add window workspace");
+    if let Some(index) = self
+      .active_window
+      .and_then(|active_window| workspace.get_window_index(active_window))
+    {
       workspace.windows.insert(index + 1, window.id);
     } else {
       workspace.windows.push(window.id);

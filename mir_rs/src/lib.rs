@@ -144,11 +144,11 @@ impl Rectangle {
   }
 
   pub fn right(&self) -> i32 {
-    self.bottom_right_safe().x
+    self.bottom_right().x
   }
 
   pub fn bottom(&self) -> i32 {
-    self.bottom_right_safe().y
+    self.bottom_right().y
   }
 
   pub fn width(&self) -> i32 {
@@ -159,11 +159,16 @@ impl Rectangle {
     self.size.height
   }
 
-  pub fn bottom_right_safe(&self) -> Point {
+  pub fn bottom_right(&self) -> Point {
     Point {
       x: self.left() + self.width(),
       y: self.top() + self.height(),
     }
+  }
+
+  pub fn contains(&self, point: &Point) -> bool {
+    self.left() <= point.x && self.right() > point.x() &&
+    self.top() <= point.y && self.bottom() > point.y
   }
 }
 

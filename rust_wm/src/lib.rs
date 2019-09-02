@@ -65,9 +65,11 @@ pub extern "C" fn init_wm(
     gesture: Gesture::None,
     active_window: None,
     active_workspace: 0,
+    new_window_workspace: 0,
   };
 
   wm.active_workspace = wm.get_or_create_unused_workspace();
+  wm.new_window_workspace = wm.active_workspace;
 
   unsafe { transmute(Box::new(wm)) }
 }
@@ -84,14 +86,23 @@ pub extern "C" fn place_new_window(
     println!("place_new_window tiled");
     if let Some(mut point) = unsafe { &mut *window_specification.top_left1() }.as_mut() {
       point.x.value = wm
+        .new_window_workspace()
         .active_window
         .and_then(|id| wm.windows.get(&id))
-        .map_or(0, |window| window.x() + window.width());
+        .map_or_else(
+          || {
+            wm.new_window_workspace()
+              .on_monitor
+              .and_then(|monitor_id| wm.monitors.get(&monitor_id))
+              .map_or(0, |monitor| monitor.extents.left())
+          },
+          |window| window.x() + window.width(),
+        );
       point.y.value = 0;
     }
 
     if let Some(mut size) = unsafe { &mut *window_specification.size1() }.as_mut() {
-      if let Some(monitor) = wm.monitor_by_workspace(wm.active_workspace) {
+      if let Some(monitor) = wm.monitor_by_workspace(wm.new_window_workspace) {
         size.height.value = monitor.extents.height();
       }
     }
@@ -114,7 +125,7 @@ pub extern "C" fn handle_window_ready(
 
   let mut window = Window::new(
     &mut wm.window_id_generator,
-    wm.active_workspace,
+    wm.new_window_workspace,
     window_info,
   );
   window.x = window.x();

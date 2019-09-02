@@ -29,6 +29,20 @@ pub extern "C" fn handle_pointer_event(
     }
   }
 
+  if action == raw::MirPointerAction::mir_pointer_action_motion {
+    let monitor = wm
+      .monitors
+      .values()
+      .find(|m| m.extents.contains(&new_cursor));
+
+    if let Some(monitor) = monitor {
+      if monitor.workspace != wm.active_workspace {
+        wm.active_workspace = monitor.workspace;
+        wm.new_window_workspace = monitor.workspace;
+      }
+    }
+  }
+
   let consume_event = match wm.gesture {
     Gesture::Move(ref gesture) => {
       if action == raw::MirPointerAction::mir_pointer_action_motion

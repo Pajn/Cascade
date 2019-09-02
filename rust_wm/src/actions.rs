@@ -222,6 +222,7 @@ pub fn naviate_monitor(wm: &mut WindowManager, direction: Direction, activation:
     if index >= 0 {
       if let Some(monitor) = monitors.get(index as usize) {
         wm.active_workspace = monitor.workspace;
+        wm.new_window_workspace = wm.active_workspace;
         let window = match (activation, direction) {
           (Activation::LastActive, _) => wm
             .get_workspace(monitor.workspace)
@@ -286,6 +287,7 @@ pub fn move_window_monitor(wm: &mut WindowManager, direction: Direction, activat
               }
             };
             wm.active_workspace = to_workspace.id;
+            wm.new_window_workspace = wm.active_workspace;
 
             wm.remove_window_from_workspace(active_window)
               .expect("Active window not found in active workspace");
