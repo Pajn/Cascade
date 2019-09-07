@@ -123,11 +123,7 @@ pub extern "C" fn handle_window_ready(
   let wm = unsafe { &mut *wm };
   let window_info = unsafe { &mut *window_info };
 
-  let mut window = Window::new(
-    &mut wm.window_id_generator,
-    wm.new_window_workspace,
-    window_info,
-  );
+  let mut window = Window::new(&mut wm.window_id_generator, window_info);
   window.x = window.x();
   window.y = window.y();
   window.size = window.rendered_size();
@@ -136,6 +132,7 @@ pub extern "C" fn handle_window_ready(
   let type_ = unsafe { window_info.type_() };
   let has_parent = unsafe { window_info_has_parent(window_info) };
   if window.is_tiled() {
+    window.on_workspace = Some(wm.new_window_workspace);
     println!(
       "handle_window_ready tiled type_ {}, has_parent {}",
       type_, has_parent
@@ -183,8 +180,10 @@ pub extern "C" fn advise_focus_gained(
       let window_id = window.id;
       wm.activate_window(window_id);
 
-      ensure_window_visible(wm, window_id);
-      update_window_positions(wm, wm.get_window(window_id).workspace);
+      if let Some(workspace_id) = wm.get_window(window_id).on_workspace {
+        ensure_window_visible(wm, window_id);
+        update_window_positions(wm, workspace_id);
+      }
     } else {
       focus_exclusive_client(wm);
     }

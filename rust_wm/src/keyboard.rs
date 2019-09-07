@@ -85,6 +85,10 @@ pub fn handle_key_press(
         .expect("failed to execute process");
       true
     }
+    xkb::KEY_d if modifiers == input_event_modifier::META_LEFT => {
+      println!("WM: {:?}", wm);
+      true
+    }
     xkb::KEY_r if modifiers == input_event_modifier::META_LEFT => {
       if let Some(active_window) = wm.active_window {
         if let Some(monitor) = wm.monitor_by_window(active_window) {
@@ -129,12 +133,10 @@ pub fn handle_key_press(
           let monitor_width = monitor.extents.width();
           let window = wm.get_window(active_window);
 
-          if window.is_tiled() {
-            let worksapce_id = window.workspace;
-
+          if let Some(workspace_id) = window.on_workspace {
             let scroll_left = window.x - monitor_left - monitor_width / 2 + window.size.width / 2;
 
-            let workspace = wm.workspaces.get_mut(&worksapce_id).unwrap();
+            let workspace = wm.workspaces.get_mut(&workspace_id).unwrap();
             workspace.scroll_left = scroll_left;
 
             arrange_windows(wm);

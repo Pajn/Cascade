@@ -57,11 +57,12 @@ pub extern "C" fn handle_pointer_event(
             window.is_dragged = false;
           }
           let window = wm.get_window(window_id);
-          let workspace_id = window.workspace;
-          let workspace = wm.workspaces.get_mut(&workspace_id).unwrap();
-          workspace.scroll_left -= displacement.dx;
+          if let Some(workspace_id) = window.on_workspace {
+            let workspace = wm.workspaces.get_mut(&workspace_id).unwrap();
+            workspace.scroll_left -= displacement.dx;
+            arrange_windows_workspace(wm, workspace_id);
+          }
           wm.focus_window(Some(window_id));
-          arrange_windows_workspace(wm, workspace_id);
         } else {
           let window = wm.windows.get_mut(&window_id).unwrap();
           if !window.is_dragged {
@@ -70,36 +71,37 @@ pub extern "C" fn handle_pointer_event(
 
           let window = wm.get_window(window_id);
           let window_width = window.width();
-          let workspace_id = window.workspace;
-          if let Some(over_monitor) = over_monitor {
-            if over_monitor.workspace != workspace_id {
-              let to_workspace_id = over_monitor.workspace;
-              let index = find_index_by_cursor(wm, to_workspace_id, &new_cursor);
-              move_window_workspace(wm, window_id, to_workspace_id, index);
-              return true;
+          if let Some(workspace_id) = window.on_workspace {
+            if let Some(over_monitor) = over_monitor {
+              if over_monitor.workspace != workspace_id {
+                let to_workspace_id = over_monitor.workspace;
+                let index = find_index_by_cursor(wm, to_workspace_id, &new_cursor);
+                move_window_workspace(wm, window_id, to_workspace_id, index);
+                return true;
+              }
             }
-          }
 
-          if let Some(left_window_id) = get_tiled_window(wm, window_id, Direction::Left) {
-            let left_window = wm.get_window(left_window_id);
-            if new_cursor.x < left_window.x() + left_window.width() / 2 + window_width / 2 {
-              wm.workspaces
-                .get_mut(&workspace_id)
-                .unwrap()
-                .swap_windows(window_id, left_window_id);
-              arrange_windows(wm);
-              return true;
+            if let Some(left_window_id) = get_tiled_window(wm, window_id, Direction::Left) {
+              let left_window = wm.get_window(left_window_id);
+              if new_cursor.x < left_window.x() + left_window.width() / 2 + window_width / 2 {
+                wm.workspaces
+                  .get_mut(&workspace_id)
+                  .unwrap()
+                  .swap_windows(window_id, left_window_id);
+                arrange_windows(wm);
+                return true;
+              }
             }
-          }
-          if let Some(right_window_id) = get_tiled_window(wm, window_id, Direction::Right) {
-            let right_window = wm.get_window(right_window_id);
-            if new_cursor.x > right_window.x() + right_window.width() / 2 - window_width / 2 {
-              wm.workspaces
-                .get_mut(&workspace_id)
-                .unwrap()
-                .swap_windows(window_id, right_window_id);
-              arrange_windows(wm);
-              return true;
+            if let Some(right_window_id) = get_tiled_window(wm, window_id, Direction::Right) {
+              let right_window = wm.get_window(right_window_id);
+              if new_cursor.x > right_window.x() + right_window.width() / 2 - window_width / 2 {
+                wm.workspaces
+                  .get_mut(&workspace_id)
+                  .unwrap()
+                  .swap_windows(window_id, right_window_id);
+                arrange_windows(wm);
+                return true;
+              }
             }
           }
 
@@ -115,8 +117,9 @@ pub extern "C" fn handle_pointer_event(
         let window = wm.windows.get_mut(&gesture.window).unwrap();
         window.is_dragged = false;
         wm.gesture = Gesture::None;
-        let workspace_id = window.workspace;
-        arrange_windows_workspace(wm, workspace_id);
+        if let Some(workspace_id) = window.on_workspace {
+          arrange_windows_workspace(wm, workspace_id);
+        }
         false
       }
     }

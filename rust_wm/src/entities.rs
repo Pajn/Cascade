@@ -27,7 +27,7 @@ impl IdGenerator {
 #[derive(Debug)]
 pub struct Window {
   pub id: Id,
-  pub workspace: Id,
+  pub on_workspace: Option<Id>,
   pub window_info: *mut miral::WindowInfo,
   pub x: i32,
   pub y: i32,
@@ -36,14 +36,10 @@ pub struct Window {
 }
 
 impl Window {
-  pub fn new(
-    id_generator: &mut IdGenerator,
-    workspace: Id,
-    window_info: *mut miral::WindowInfo,
-  ) -> Window {
+  pub fn new(id_generator: &mut IdGenerator, window_info: *mut miral::WindowInfo) -> Window {
     Window {
       id: id_generator.next_id(),
-      workspace,
+      on_workspace: None,
       window_info,
       x: 0,
       y: 0,
@@ -174,27 +170,9 @@ impl Workspace {
     }
   }
 
-  pub fn get_tiled_windows(&self, wm: &WindowManager) -> Vec<Id> {
-    self
-      .windows
-      .iter()
-      .filter(|w| wm.get_window(**w).is_tiled())
-      .copied()
-      .collect()
-  }
-
   pub fn get_window_index(&self, window: Id) -> Option<usize> {
     self
       .windows
-      .iter()
-      .enumerate()
-      .find(|(_, w)| **w == window)
-      .map(|(index, _)| index)
-  }
-
-  pub fn get_tiled_window_index(&self, wm: &WindowManager, window: Id) -> Option<usize> {
-    self
-      .get_tiled_windows(wm)
       .iter()
       .enumerate()
       .find(|(_, w)| **w == window)
@@ -294,8 +272,8 @@ impl WindowManager {
   }
 
   pub fn monitor_by_window(&self, window_id: Id) -> Option<&Monitor> {
-    let workspace_id = self.get_window(window_id).workspace;
-    self.monitor_by_workspace(workspace_id)
+    let workspace_id = self.get_window(window_id).on_workspace;
+    workspace_id.and_then(|workspace_id| self.monitor_by_workspace(workspace_id))
   }
 
   pub fn window_by_info(&self, window_info: *const miral::WindowInfo) -> Option<&Window> {
@@ -360,7 +338,8 @@ impl WindowManager {
 
   pub fn add_window(&mut self, window: Window) -> () {
     println!("WM: {:?}, adding: {:?}", &self, &window);
-    let workspace = self.workspaces.get_mut(&window.workspace).unwrap();
+    if let Some(workspace_id) = window.on_workspace {
+      let workspace = self.workspaces.get_mut(&workspace_id).unwrap();
 
     if let Some(index) = self
       .active_window
@@ -369,6 +348,7 @@ impl WindowManager {
       workspace.windows.insert(index + 1, window.id);
     } else {
       workspace.windows.push(window.id);
+    }
     }
 
     let window_id = window.id;
@@ -387,9 +367,8 @@ impl WindowManager {
   pub fn delete_window(&mut self, window_id: Id) -> () {
     self.input_inhibitor.clear_if_dead();
 
-    self
-      .remove_window_from_workspace(window_id)
-      .expect("nowindow in workspace advise_delete_window");
+    // Ignore the error as it's normal that windows are not in any workspace
+    let _ = self.remove_window_from_workspace(window_id);
     self.windows.remove(&window_id);
 
     if self.active_window == Some(window_id) {
@@ -400,31 +379,32 @@ impl WindowManager {
   }
 
   pub fn activate_window(&mut self, window_id: Id) -> () {
-    let workspace_id = self.get_window(window_id).workspace;
+    if let Some(workspace_id) = self.get_window(window_id).on_workspace {
     let workspace = self.workspaces.get_mut(&workspace_id).unwrap();
 
     workspace.active_window = Some(window_id);
+      self.active_workspace = workspace_id;
+    }
     self.active_window = Some(window_id);
-    self.active_workspace = workspace_id;
   }
 
   pub fn remove_window_from_workspace(&mut self, window: Id) -> Result<(), ()> {
-    let workspace = self.get_workspace(self.get_window(window).workspace);
+    let workspace = self.get_workspace(self.get_window(window).on_workspace.ok_or(())?);
     let workspace_id = workspace.id;
     if workspace.active_window == Some(window) {
       let active_window = self.get_window(workspace.active_window.unwrap());
       if active_window.is_tiled() {
-        let tiled_index = workspace.get_tiled_window_index(self, window).ok_or(())?;
-        let tiled_index = if tiled_index > 0 {
-          tiled_index - 1
+        let window_index = workspace.get_window_index(window).ok_or(())?;
+        let window_index = if window_index > 0 {
+          window_index - 1
         } else {
-          tiled_index + 1
+          window_index + 1
         };
-        let next_active_window = workspace.get_tiled_windows(self).get(tiled_index).copied();
+        let next_active_window = workspace.windows.get(window_index).copied();
         let workspace = self.workspaces.get_mut(&workspace_id).unwrap();
         workspace.active_window = next_active_window;
       } else {
-        let next_active_window = workspace.get_tiled_windows(self).last().copied();
+        let next_active_window = workspace.windows.last().copied();
         let workspace = self.workspaces.get_mut(&workspace_id).unwrap();
         workspace.active_window = next_active_window;
       }

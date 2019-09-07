@@ -54,7 +54,7 @@ pub fn ensure_window_visible(wm: &mut WindowManager, window_id: Id) -> () {
     let window = wm.get_window(window_id);
     let window_x = window.x;
     let window_width = window.width();
-    let workspace_id = window.workspace;
+    let workspace_id = window.on_workspace.unwrap();
     let workspace = wm.workspaces.get_mut(&workspace_id).unwrap();
 
     let x_window_left = window_x;
@@ -79,9 +79,8 @@ pub fn ensure_window_visible(wm: &mut WindowManager, window_id: Id) -> () {
 pub fn update_window_positions(wm: &mut WindowManager, workspace_id: Id) -> () {
   let workspace = wm.get_workspace(workspace_id);
   let scroll_left = workspace.scroll_left;
-  let windows = workspace.get_tiled_windows(wm);
 
-  for window_id in windows {
+  for window_id in workspace.windows.clone() {
     let window = wm.get_window(window_id);
 
     if window.is_dragged {
@@ -131,23 +130,22 @@ pub enum Direction {
 }
 
 pub fn naviate_first(wm: &mut WindowManager) {
-  if let Some(window_id) = wm.active_workspace().get_tiled_windows(wm).first().copied() {
+  if let Some(window_id) = wm.active_workspace().windows.first().copied() {
     wm.focus_window(Some(window_id));
   }
 }
 
 pub fn naviate_last(wm: &mut WindowManager) {
-  if let Some(window_id) = wm.active_workspace().get_tiled_windows(wm).last().copied() {
+  if let Some(window_id) = wm.active_workspace().windows.last().copied() {
     wm.focus_window(Some(window_id));
   }
 }
 
 pub fn get_tiled_window(wm: &WindowManager, window_id: Id, direction: Direction) -> Option<Id> {
   let window = wm.get_window(window_id);
-  let workspace = wm.get_workspace(window.workspace);
-  let tiled_windows = workspace.get_tiled_windows(wm);
+  let workspace = wm.get_workspace(window.on_workspace.unwrap());
   let index = workspace
-    .get_tiled_window_index(wm, window_id)
+    .get_window_index(window_id)
     .expect("Active window not found in active workspace") as isize;
   let index = match direction {
     Direction::Left => index - 1,
@@ -157,7 +155,7 @@ pub fn get_tiled_window(wm: &WindowManager, window_id: Id, direction: Direction)
   if index < 0 {
     None
   } else {
-    tiled_windows.get(index as usize).cloned()
+    workspace.windows.get(index as usize).cloned()
   }
 }
 
@@ -180,9 +178,8 @@ pub fn naviate(wm: &mut WindowManager, direction: Direction) {
 
 pub fn move_window(wm: &mut WindowManager, direction: Direction) {
   if let Some(active_window) = wm.active_window {
-    if wm.get_window(active_window).is_tiled() {
+    if let Some(workspace_id) = wm.get_window(active_window).on_workspace {
       if let Some(other_window) = get_tiled_window(wm, active_window, direction) {
-        let workspace_id = wm.get_window(active_window).workspace;
         wm.workspaces
           .get_mut(&workspace_id)
           .unwrap()
@@ -292,18 +289,20 @@ pub fn move_window_workspace(
     .expect("Window to move not found in its workspace");
 
   let window = wm.windows.get_mut(&window_id).unwrap();
-  let from_workspace_id = window.workspace;
-  window.workspace = to_workspace_id;
+  let from_workspace_id = window.on_workspace;
+  window.on_workspace = Some(to_workspace_id);
 
   arrange_windows_workspace(wm, to_workspace_id);
+  if let Some(from_workspace_id) = from_workspace_id {
   arrange_windows_workspace(wm, from_workspace_id);
+}
 }
 
 pub fn move_window_monitor(wm: &mut WindowManager, direction: Direction, activation: Activation) {
   if let Some(active_window) = wm.active_window {
     let window = wm.get_window(active_window);
-    if window.is_tiled() {
-      let from_workspace = wm.get_workspace(window.workspace);
+    if let Some(from_workspace_id) = window.on_workspace {
+      let from_workspace = wm.get_workspace(from_workspace_id);
       if let Some(monitor) = from_workspace.on_monitor {
         let mut monitors = wm.monitors.values().collect::<Vec<_>>();
         monitors.sort_by(monitor_x_position);
@@ -371,9 +370,7 @@ pub fn apply_resize_by(wm: &mut WindowManager, displacement: Displacement) -> ()
       );
       new_pos.x = old_pos.x + displacement.dx + (requested_width - new_size.width);
 
-      let window_is_tiled = window.is_tiled();
-      if window_is_tiled {
-        let workspace_id = window.workspace;
+      if let Some(workspace_id) = window.on_workspace {
         let workspace = wm.workspaces.get_mut(&workspace_id).unwrap();
         workspace.scroll_left -= displacement.dx;
       }
@@ -388,15 +385,15 @@ pub fn apply_resize_by(wm: &mut WindowManager, displacement: Displacement) -> ()
       new_size.height = old_size.height + displacement.dy;
     }
 
-    // let window = wm.windows.get_mut(&gesture.window).unwrap();
     let window_id = gesture.window;
-    let workspace_id = wm.get_window(window_id).workspace;
+    if let Some(workspace_id) = wm.get_window(window_id).on_workspace {
     if new_pos != old_pos || new_size != old_size {
       if new_size != old_size {
         let window = wm.windows.get_mut(&window_id).unwrap();
         window.resize(new_size);
       }
       arrange_windows_workspace(wm, workspace_id);
+    }
     }
     if wm.active_window != Some(window_id) {
       wm.focus_window(Some(window_id));
