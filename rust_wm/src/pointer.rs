@@ -29,13 +29,13 @@ pub extern "C" fn handle_pointer_event(
     }
   }
 
-  if action == raw::MirPointerAction::mir_pointer_action_motion {
-    let monitor = wm
-      .monitors
-      .values()
-      .find(|m| m.extents.contains(&new_cursor));
+  let over_monitor = wm
+    .monitors
+    .values()
+    .find(|m| m.extents.contains(&new_cursor));
 
-    if let Some(monitor) = monitor {
+  if action == raw::MirPointerAction::mir_pointer_action_motion {
+    if let Some(monitor) = over_monitor {
       if monitor.workspace != wm.active_workspace {
         wm.active_workspace = monitor.workspace;
         wm.new_window_workspace = monitor.workspace;
@@ -69,8 +69,16 @@ pub extern "C" fn handle_pointer_event(
           }
 
           let window = wm.get_window(window_id);
-          let workspace_id = window.workspace;
           let window_width = window.width();
+          let workspace_id = window.workspace;
+          if let Some(over_monitor) = over_monitor {
+            if over_monitor.workspace != workspace_id {
+              let to_workspace_id = over_monitor.workspace;
+              let index = find_index_by_cursor(wm, to_workspace_id, &new_cursor);
+              move_window_workspace(wm, window_id, to_workspace_id, index);
+              return true;
+            }
+          }
 
           if let Some(left_window_id) = get_tiled_window(wm, window_id, Direction::Left) {
             let left_window = wm.get_window(left_window_id);
@@ -96,8 +104,9 @@ pub extern "C" fn handle_pointer_event(
           }
 
           unsafe {
-            let window = (*window.window_info).window();
-            (*wm.tools).drag_window(window, displacement.into());
+            let window = wm.get_window(window_id);
+            let window_raw = (*window.window_info).window();
+            (*wm.tools).drag_window(window_raw, displacement.into());
           }
         }
 

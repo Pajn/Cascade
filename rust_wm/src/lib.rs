@@ -215,14 +215,17 @@ pub extern "C" fn post_handle_modify_window(
 ) -> () {
   let wm = unsafe { &mut *wm };
 
-  let window = wm
+  if let Some(window) = wm
     .window_by_info(window_info)
     .map(|w| w.id)
     .and_then(|id| wm.windows.get_mut(&id))
-    .expect("Could get modified window");
-  window.size = window.rendered_size();
+  {
+    window.size = window.rendered_size();
 
-  arrange_windows(wm);
+    arrange_windows(wm);
+  } else {
+    println!("Could not get modified window");
+  }
 }
 
 #[no_mangle]

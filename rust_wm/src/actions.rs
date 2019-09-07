@@ -244,12 +244,63 @@ pub fn naviate_monitor(wm: &mut WindowManager, direction: Direction, activation:
   }
 }
 
+pub fn find_index_by_cursor(wm: &WindowManager, workspace_id: Id, cursor: &Point) -> usize {
+  let workspace = wm.get_workspace(workspace_id);
+  let mut max_x = None;
+  for (index, window_id) in workspace.windows.iter().cloned().enumerate() {
+    let window = wm.get_window(window_id);
+    if window.is_tiled() {
+      let pos = window.rendered_pos();
+
+      if pos.x_axis().contains(&cursor.x) {
+        if cursor.x < pos.x_center() {
+          return index;
+        } else {
+          return index + 1;
+        }
+      }
+
+      if max_x == None || Some(pos.right()) > max_x {
+        max_x = Some(window.x());
+      }
+    }
+  }
+
+  if Some(cursor.x) > max_x {
+    return workspace.windows.len();
+  } else {
+    return 0;
+  }
+}
+
+pub fn move_window_workspace(
+  wm: &mut WindowManager,
+  window_id: Id,
+  to_workspace_id: Id,
+  index: usize,
+) {
+  let to_workspace = wm.workspaces.get_mut(&to_workspace_id).unwrap();
+
+  to_workspace.windows.insert(index, window_id);
+  wm.active_workspace = to_workspace_id;
+  wm.new_window_workspace = to_workspace_id;
+
+  wm.remove_window_from_workspace(window_id)
+    .expect("Window to move not found in its workspace");
+
+  let window = wm.windows.get_mut(&window_id).unwrap();
+  let from_workspace_id = window.workspace;
+  window.workspace = to_workspace_id;
+
+  arrange_windows(wm);
+  arrange_windows_workspace(wm, from_workspace_id);
+}
+
 pub fn move_window_monitor(wm: &mut WindowManager, direction: Direction, activation: Activation) {
   if let Some(active_window) = wm.active_window {
     let window = wm.get_window(active_window);
     if window.is_tiled() {
       let from_workspace = wm.get_workspace(window.workspace);
-      let from_workspace_id = from_workspace.id;
       if let Some(monitor) = from_workspace.on_monitor {
         let mut monitors = wm.monitors.values().collect::<Vec<_>>();
         monitors.sort_by(monitor_x_position);
@@ -268,35 +319,19 @@ pub fn move_window_monitor(wm: &mut WindowManager, direction: Direction, activat
 
         if index >= 0 {
           if let Some(monitor) = monitors.get(index as usize) {
-            let to_workspace = wm.workspaces.get_mut(&monitor.workspace).unwrap();
+            let to_workspace_id = monitor.workspace;
+            let to_workspace = wm.get_workspace(to_workspace_id);
 
-            match (activation, direction) {
-              (Activation::LastActive, _) => {
-                let index = to_workspace
+            let index = match (activation, direction) {
+              (Activation::LastActive, _) => to_workspace
                   .active_window
                   .and_then(|w| to_workspace.get_window_index(w).map(|i| i + 1))
-                  .unwrap_or(to_workspace.windows.len());
-
-                to_workspace.windows.insert(index, active_window)
-              }
-              (Activation::FromDirection, Direction::Left) => {
-                to_workspace.windows.push(active_window)
-              }
-              (Activation::FromDirection, Direction::Right) => {
-                to_workspace.windows.insert(0, active_window)
-              }
+                .unwrap_or(to_workspace.windows.len()),
+              (Activation::FromDirection, Direction::Left) => to_workspace.windows.len(),
+              (Activation::FromDirection, Direction::Right) => 0,
             };
-            wm.active_workspace = to_workspace.id;
-            wm.new_window_workspace = wm.active_workspace;
 
-            wm.remove_window_from_workspace(active_window)
-              .expect("Active window not found in active workspace");
-
-            let window = wm.windows.get_mut(&active_window).unwrap();
-            window.workspace = wm.active_workspace;
-
-            arrange_windows(wm);
-            arrange_windows_workspace(wm, from_workspace_id);
+            move_window_workspace(wm, active_window, to_workspace_id, index);
           }
         }
       } else {

@@ -2,8 +2,8 @@ mod ffi;
 
 pub use ffi::root as raw;
 pub use ffi::root::{mir, miral};
+use std::ops::{Range, Sub};
 use xkbcommon::xkb;
-use std::ops::Sub;
 
 pub trait AsOption<T> {
   fn as_ref(&self) -> Option<&T>;
@@ -166,9 +166,27 @@ impl Rectangle {
     }
   }
 
+  pub fn x_center(&self) -> i32 {
+    (self.right() - self.left()) / 2
+  }
+
+  pub fn y_center(&self) -> i32 {
+    (self.bottom() - self.top()) / 2
+  }
+
+  pub fn x_axis(&self) -> Range<i32> {
+    self.left()..self.right()
+  }
+
+  pub fn y_axis(&self) -> Range<i32> {
+    self.top()..self.bottom()
+  }
+
   pub fn contains(&self, point: &Point) -> bool {
-    self.left() <= point.x && self.right() > point.x() &&
-    self.top() <= point.y && self.bottom() > point.y
+    self.left() <= point.x
+      && self.right() > point.x()
+      && self.top() <= point.y
+      && self.bottom() > point.y
   }
 }
 
@@ -208,8 +226,12 @@ impl From<mir::geometry::Displacement> for Displacement {
 impl From<Displacement> for mir::geometry::Displacement {
   fn from(displacement: Displacement) -> mir::geometry::Displacement {
     mir::geometry::Displacement {
-      dx: mir::geometry::detail::IntWrapper { value: displacement.dx },
-      dy: mir::geometry::detail::IntWrapper { value: displacement.dy },
+      dx: mir::geometry::detail::IntWrapper {
+        value: displacement.dx,
+      },
+      dy: mir::geometry::detail::IntWrapper {
+        value: displacement.dy,
+      },
     }
   }
 }

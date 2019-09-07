@@ -75,6 +75,13 @@ impl Window {
     unsafe { (*(*self.window_info).window()).size().height.value }
   }
 
+  pub fn rendered_pos(&self) -> Rectangle {
+    Rectangle {
+      top_left: self.rendered_top_left(),
+      size: self.rendered_size(),
+    }
+  }
+
   pub fn rendered_top_left(&self) -> Point {
     Point {
       x: self.x(),
