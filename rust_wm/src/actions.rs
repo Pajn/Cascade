@@ -54,7 +54,8 @@ pub fn ensure_window_visible(wm: &mut WindowManager, window_id: Id) -> () {
     let window = wm.get_window(window_id);
     let window_x = window.x;
     let window_width = window.width();
-    let workspace = wm.workspaces.get_mut(&wm.active_workspace).unwrap();
+    let workspace_id = window.workspace;
+    let workspace = wm.workspaces.get_mut(&workspace_id).unwrap();
 
     let x_window_left = window_x;
     let x_window_right = window_x + window_width;
@@ -109,10 +110,11 @@ pub fn update_window_positions(wm: &mut WindowManager, workspace_id: Id) -> () {
 
 pub fn arrange_windows_workspace(wm: &mut WindowManager, workspace_id: Id) -> () {
   update_cached_positions(wm, workspace_id);
-  if let Some(active_window) = wm.active_window() {
-    if active_window.workspace == workspace_id && active_window.is_tiled() {
-      let id = active_window.id;
-      ensure_window_visible(wm, id);
+  let workspace = wm.get_workspace(workspace_id);
+  if let Some(active_window_id) = workspace.active_window {
+    let active_window = wm.get_window(active_window_id);
+    if active_window.is_tiled() {
+      ensure_window_visible(wm, active_window_id);
     }
   }
   update_window_positions(wm, workspace_id);
@@ -282,6 +284,7 @@ pub fn move_window_workspace(
   let to_workspace = wm.workspaces.get_mut(&to_workspace_id).unwrap();
 
   to_workspace.windows.insert(index, window_id);
+  to_workspace.active_window = Some(window_id);
   wm.active_workspace = to_workspace_id;
   wm.new_window_workspace = to_workspace_id;
 
@@ -292,7 +295,7 @@ pub fn move_window_workspace(
   let from_workspace_id = window.workspace;
   window.workspace = to_workspace_id;
 
-  arrange_windows(wm);
+  arrange_windows_workspace(wm, to_workspace_id);
   arrange_windows_workspace(wm, from_workspace_id);
 }
 
