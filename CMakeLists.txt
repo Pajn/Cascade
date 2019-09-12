@@ -8,6 +8,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -g -Werror -Wall -pedantic -Wex
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-z,defs")
 
 include(FindPkgConfig)
+pkg_check_modules(MIRSERVER mirserver REQUIRED)
 pkg_check_modules(MIRAL miral REQUIRED)
 pkg_check_modules(FREETYPE freetype2 REQUIRED)
 pkg_check_modules(WAYLAND_CLIENT REQUIRED wayland-client)
@@ -25,7 +26,12 @@ add_library(cascade-wayland STATIC
     wlr_input_inhibitor.cpp wlr_input_inhibitor.h
 )
 
-target_include_directories(cascade-wayland PUBLIC SYSTEM ${MIRAL_INCLUDE_DIRS} ${MIRWAYLAND_INCLUDE_DIRS})
+target_include_directories(cascade-wayland 
+  PUBLIC SYSTEM
+  ${MIRSERVER_INCLUDE_DIRS}
+  ${MIRAL_INCLUDE_DIRS}
+  ${MIRWAYLAND_INCLUDE_DIRS}
+)
 
 # enable_testing()
 # pkg_check_modules(MIRTEST mirtest REQUIRED)

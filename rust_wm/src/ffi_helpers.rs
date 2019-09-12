@@ -6,6 +6,13 @@ use std::os::raw::c_char;
 extern "C" {
   pub fn window_specification_name(window_info: *const miral::WindowSpecification)
     -> *const c_char;
+  pub fn configure_window(
+    window_info: *const miral::WindowInfo,
+    attrib: raw::MirWindowAttrib::Type,
+    value: i32,
+  ) -> i32;
+  pub fn hide_window(window_info: *const miral::WindowInfo) -> ();
+  pub fn show_window(window_info: *const miral::WindowInfo) -> ();
   pub fn window_name(window_info: *const miral::WindowInfo) -> SharedPtrString;
   pub fn rust_get_string(value: SharedPtrString) -> *const c_char;
   pub fn rust_drop_string(value: SharedPtrString) -> ();

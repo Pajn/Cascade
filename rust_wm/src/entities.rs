@@ -33,6 +33,7 @@ pub struct Window {
   pub y: i32,
   pub size: Size,
   pub is_dragged: bool,
+  pub old_state: Option<raw::MirWindowState::Type>,
 }
 
 impl Window {
@@ -48,6 +49,7 @@ impl Window {
         height: 0,
       },
       is_dragged: false,
+      old_state: None,
     }
   }
 
@@ -132,8 +134,46 @@ impl Window {
     unsafe { (*self.window_info).state() }
   }
 
+  pub fn set_state(&self, state: raw::MirWindowState::Type) {
+    unsafe {
+      (*self.window_info).state1(state);
+      configure_window(
+        self.window_info,
+        raw::MirWindowAttrib::mir_window_attrib_state,
+        state as i32,
+      );
+    }
+  }
+
   pub fn has_parent(&self) -> bool {
     unsafe { window_info_has_parent(self.window_info) }
+  }
+
+  pub fn hide(&mut self) {
+    self.old_state = Some(self.state());
+    self.set_state(raw::MirWindowState::mir_window_state_hidden);
+    unsafe { hide_window(self.window_info) };
+  }
+  pub fn show(&mut self) {
+    if let Some(old_state) = self.old_state {
+      self.old_state = None;
+      let old_state = match old_state {
+        raw::MirWindowState::mir_window_state_hidden
+        | raw::MirWindowState::mir_window_state_minimized => {
+          raw::MirWindowState::mir_window_state_restored
+        }
+        old_state => old_state,
+      };
+      self.set_state(old_state)
+    }
+    unsafe { show_window(self.window_info) };
+  }
+
+  pub fn minimize(&self) {
+    unsafe { (*self.window_info).state1(raw::MirWindowState::mir_window_state_minimized) }
+  }
+  pub fn restore(&self) {
+    unsafe { (*self.window_info).state1(raw::MirWindowState::mir_window_state_restored) }
   }
 
   pub fn is_tiled(&self) -> bool {
@@ -341,14 +381,14 @@ impl WindowManager {
     if let Some(workspace_id) = window.on_workspace {
       let workspace = self.workspaces.get_mut(&workspace_id).unwrap();
 
-    if let Some(index) = self
-      .active_window
-      .and_then(|active_window| workspace.get_window_index(active_window))
-    {
-      workspace.windows.insert(index + 1, window.id);
-    } else {
-      workspace.windows.push(window.id);
-    }
+      if let Some(index) = self
+        .active_window
+        .and_then(|active_window| workspace.get_window_index(active_window))
+      {
+        workspace.windows.insert(index + 1, window.id);
+      } else {
+        workspace.windows.push(window.id);
+      }
     }
 
     let window_id = window.id;
@@ -380,10 +420,13 @@ impl WindowManager {
 
   pub fn activate_window(&mut self, window_id: Id) -> () {
     if let Some(workspace_id) = self.get_window(window_id).on_workspace {
-    let workspace = self.workspaces.get_mut(&workspace_id).unwrap();
+      let workspace = self.workspaces.get_mut(&workspace_id).unwrap();
 
-    workspace.active_window = Some(window_id);
-      self.active_workspace = workspace_id;
+      if workspace.on_monitor.is_some() {
+        workspace.active_window = Some(window_id);
+        self.active_workspace = workspace_id;
+        self.new_window_workspace = workspace_id;
+      }
     }
     self.active_window = Some(window_id);
   }

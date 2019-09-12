@@ -1,3 +1,4 @@
+#include <mir/scene/surface.h>
 #include <miral/wayland_extensions.h>
 #include <miral/window_info.h>
 #include <miral/window_manager_tools.h>
@@ -10,6 +11,24 @@ extern "C" const char* window_specification_name(miral::WindowSpecification& spe
     } else {
         return nullptr;
     }
+}
+
+extern "C" int configure_window(miral::WindowInfo& window_info, MirWindowAttrib attrib, int value)
+{
+    std::shared_ptr<mir::scene::Surface> surface = window_info.window();
+    return surface.get()->configure(attrib, value);
+}
+
+extern "C" void hide_window(miral::WindowInfo& window_info)
+{
+    std::shared_ptr<mir::scene::Surface> surface = window_info.window();
+    surface.get()->hide();
+}
+
+extern "C" void show_window(miral::WindowInfo& window_info)
+{
+    std::shared_ptr<mir::scene::Surface> surface = window_info.window();
+    surface.get()->show();
 }
 
 extern "C" void* window_name(miral::WindowInfo& window_info)

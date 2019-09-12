@@ -192,16 +192,30 @@ pub extern "C" fn advise_focus_gained(
 
 #[no_mangle]
 pub extern "C" fn pre_handle_modify_window(
-  _wm: *mut WindowManager,
+  wm: *mut WindowManager,
   window_info: *const miral::WindowInfo,
   modifications: *mut miral::WindowSpecification,
 ) -> () {
+  let wm = unsafe { &mut *wm };
   let window_info = unsafe { &*window_info };
   let modifications = unsafe { &mut *modifications };
 
   if let Some(state) = unsafe { (*modifications.state()).as_ref() } {
     if *state == raw::MirWindowState::mir_window_state_maximized {
       unsafe { (*modifications.state1()).value_ = window_info.state() };
+    }
+    // Hack: Something (probably basic window manager in miral) tries
+    // to unset hidden. For now, just make sure that it can't but
+    // later on figure out why this is needed and make sure it isn't.
+    if *state == raw::MirWindowState::mir_window_state_restored {
+      if let Some(window) = wm.window_by_info(window_info) {
+        if window.state() == raw::MirWindowState::mir_window_state_hidden
+          && window.old_state.is_some()
+        {
+          println!("Tried to unset hidden");
+          unsafe { (*modifications.state1()).value_ = window_info.state() };
+        }
+      }
     }
   }
 }

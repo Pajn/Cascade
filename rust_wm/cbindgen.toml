@@ -61,6 +61,9 @@ style = "both"
 include = []
 exclude = [
   "window_specification_name",
+  "configure_window",
+  "hide_window",
+  "show_window",
   "window_name",
   "window_info_has_parent",
   "get_active_window",

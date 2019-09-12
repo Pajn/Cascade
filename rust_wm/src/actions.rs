@@ -129,6 +129,12 @@ pub enum Direction {
   Right,
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum VerticalDirection {
+  Up,
+  Down,
+}
+
 pub fn naviate_first(wm: &mut WindowManager) {
   if let Some(window_id) = wm.active_workspace().windows.first().copied() {
     wm.focus_window(Some(window_id));
@@ -294,8 +300,8 @@ pub fn move_window_workspace(
 
   arrange_windows_workspace(wm, to_workspace_id);
   if let Some(from_workspace_id) = from_workspace_id {
-  arrange_windows_workspace(wm, from_workspace_id);
-}
+    arrange_windows_workspace(wm, from_workspace_id);
+  }
 }
 
 pub fn move_window_monitor(wm: &mut WindowManager, direction: Direction, activation: Activation) {
@@ -326,8 +332,8 @@ pub fn move_window_monitor(wm: &mut WindowManager, direction: Direction, activat
 
             let index = match (activation, direction) {
               (Activation::LastActive, _) => to_workspace
-                  .active_window
-                  .and_then(|w| to_workspace.get_window_index(w).map(|i| i + 1))
+                .active_window
+                .and_then(|w| to_workspace.get_window_index(w).map(|i| i + 1))
                 .unwrap_or(to_workspace.windows.len()),
               (Activation::FromDirection, Direction::Left) => to_workspace.windows.len(),
               (Activation::FromDirection, Direction::Right) => 0,
@@ -341,6 +347,59 @@ pub fn move_window_monitor(wm: &mut WindowManager, direction: Direction, activat
         println!("Active window was on workspace that was not on any monitor")
       }
     }
+  }
+}
+
+pub fn switch_workspace(wm: &mut WindowManager, direction: VerticalDirection) {
+  let mut hidden_workspaces = wm
+    .workspaces
+    .values()
+    .filter(|workspace| workspace.on_monitor.is_none())
+    .collect::<Vec<_>>();
+  hidden_workspaces.sort_by(|a, b| a.id.cmp(&b.id));
+
+  let current_workspace = wm.active_workspace();
+  let current_workspace_id = current_workspace.id;
+
+  for window_id in current_workspace.windows.clone() {
+    let window = wm.windows.get_mut(&window_id).unwrap();
+    window.hide();
+  }
+
+  let next_workspace = match direction {
+    VerticalDirection::Up => hidden_workspaces
+      .iter()
+      .find(|w| w.id > current_workspace_id)
+      .or(hidden_workspaces.first())
+      .unwrap(),
+    VerticalDirection::Down => hidden_workspaces
+      .iter()
+      .rfind(|w| w.id < current_workspace_id)
+      .or(hidden_workspaces.last())
+      .unwrap(),
+  };
+  let next_workspace_id = next_workspace.id;
+  let next_active_window = next_workspace.active_window;
+
+  let current_workspace = wm.workspaces.get_mut(&current_workspace_id).unwrap();
+  let monitor_id = current_workspace.on_monitor.unwrap();
+  current_workspace.on_monitor = None;
+
+  let next_workspace = wm.workspaces.get_mut(&next_workspace_id).unwrap();
+  next_workspace.on_monitor = Some(monitor_id);
+
+  let monitor = wm.monitors.get_mut(&monitor_id).unwrap();
+  monitor.workspace = next_workspace_id;
+
+  wm.active_workspace = next_workspace_id;
+  wm.new_window_workspace = next_workspace_id;
+  wm.focus_window(next_active_window);
+  arrange_windows_workspace(wm, next_workspace_id);
+
+  let next_workspace = wm.get_workspace(next_workspace_id);
+  for window_id in next_workspace.windows.clone() {
+    let window = wm.windows.get_mut(&window_id).unwrap();
+    window.show();
   }
 }
 
@@ -387,13 +446,13 @@ pub fn apply_resize_by(wm: &mut WindowManager, displacement: Displacement) -> ()
 
     let window_id = gesture.window;
     if let Some(workspace_id) = wm.get_window(window_id).on_workspace {
-    if new_pos != old_pos || new_size != old_size {
-      if new_size != old_size {
-        let window = wm.windows.get_mut(&window_id).unwrap();
-        window.resize(new_size);
+      if new_pos != old_pos || new_size != old_size {
+        if new_size != old_size {
+          let window = wm.windows.get_mut(&window_id).unwrap();
+          window.resize(new_size);
+        }
+        arrange_windows_workspace(wm, workspace_id);
       }
-      arrange_windows_workspace(wm, workspace_id);
-    }
     }
     if wm.active_window != Some(window_id) {
       wm.focus_window(Some(window_id));

@@ -73,7 +73,7 @@ void post_handle_modify_window(WindowManager *wm,
                                const WindowInfo *window_info,
                                const WindowSpecification *_modifications);
 
-void pre_handle_modify_window(WindowManager *_wm,
+void pre_handle_modify_window(WindowManager *wm,
                               const WindowInfo *window_info,
                               WindowSpecification *modifications);
 

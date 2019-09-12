@@ -37,6 +37,14 @@ pub fn handle_key_press(
       naviate(wm, Direction::Right);
       true
     }
+    xkb::KEY_Up if modifiers == input_event_modifier::META_LEFT => {
+      switch_workspace(wm, VerticalDirection::Up);
+      true
+    }
+    xkb::KEY_Down if modifiers == input_event_modifier::META_LEFT => {
+      switch_workspace(wm, VerticalDirection::Down);
+      true
+    }
     xkb::KEY_Left
       if modifiers == input_event_modifier::META_LEFT | input_event_modifier::CTRL_LEFT =>
     {
@@ -50,13 +58,13 @@ pub fn handle_key_press(
       true
     }
     xkb::KEY_Left
-      if modifiers == input_event_modifier::META_LEFT | input_event_modifier::SHIFT_LEFT =>
+      if modifiers == input_event_modifier::META_LEFT | input_event_modifier::ALT_LEFT =>
     {
       naviate_monitor(wm, Direction::Left, Activation::LastActive);
       true
     }
     xkb::KEY_Right
-      if modifiers == input_event_modifier::META_LEFT | input_event_modifier::SHIFT_LEFT =>
+      if modifiers == input_event_modifier::META_LEFT | input_event_modifier::ALT_LEFT =>
     {
       naviate_monitor(wm, Direction::Right, Activation::LastActive);
       true
@@ -65,7 +73,7 @@ pub fn handle_key_press(
       if modifiers
         == input_event_modifier::META_LEFT
           | input_event_modifier::CTRL_LEFT
-          | input_event_modifier::SHIFT_LEFT =>
+          | input_event_modifier::ALT_LEFT =>
     {
       move_window_monitor(wm, Direction::Left, Activation::LastActive);
       true
@@ -74,7 +82,7 @@ pub fn handle_key_press(
       if modifiers
         == input_event_modifier::META_LEFT
           | input_event_modifier::CTRL_LEFT
-          | input_event_modifier::SHIFT_LEFT =>
+          | input_event_modifier::ALT_LEFT =>
     {
       move_window_monitor(wm, Direction::Right, Activation::LastActive);
       true
@@ -87,6 +95,9 @@ pub fn handle_key_press(
     }
     xkb::KEY_d if modifiers == input_event_modifier::META_LEFT => {
       println!("WM: {:?}", wm);
+      for window in wm.windows.values() {
+        println!("{}: {}", window.name(), window.state());
+      }
       true
     }
     xkb::KEY_r if modifiers == input_event_modifier::META_LEFT => {
