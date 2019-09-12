@@ -2,7 +2,7 @@ mod ffi;
 
 pub use ffi::root as raw;
 pub use ffi::root::{mir, miral};
-use std::ops::{Range, Sub};
+use std::ops::{Add, Range, Sub};
 use xkbcommon::xkb;
 
 pub trait AsOption<T> {
@@ -214,6 +214,15 @@ pub struct Displacement {
   pub dy: i32,
 }
 
+impl Displacement {
+  pub fn as_size(&self) -> Size {
+    Size {
+      width: self.dx,
+      height: self.dy,
+    }
+  }
+}
+
 impl From<mir::geometry::Displacement> for Displacement {
   fn from(displacement: mir::geometry::Displacement) -> Displacement {
     Displacement {
@@ -232,6 +241,50 @@ impl From<Displacement> for mir::geometry::Displacement {
       dy: mir::geometry::detail::IntWrapper {
         value: displacement.dy,
       },
+    }
+  }
+}
+
+impl Add<Displacement> for Point {
+  type Output = Point;
+
+  fn add(self, other: Displacement) -> Self::Output {
+    Point {
+      x: self.x + other.dx,
+      y: self.y + other.dy,
+    }
+  }
+}
+
+impl Sub<Displacement> for Point {
+  type Output = Point;
+
+  fn sub(self, other: Displacement) -> Self::Output {
+    Point {
+      x: self.x - other.dx,
+      y: self.y - other.dy,
+    }
+  }
+}
+
+impl Add<Size> for Size {
+  type Output = Size;
+
+  fn add(self, other: Size) -> Self::Output {
+    Size {
+      width: self.width + other.width,
+      height: self.height + other.height,
+    }
+  }
+}
+
+impl Sub<Size> for Size {
+  type Output = Size;
+
+  fn sub(self, other: Size) -> Self::Output {
+    Size {
+      width: self.width - other.width,
+      height: self.height - other.height,
     }
   }
 }
