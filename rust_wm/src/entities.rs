@@ -1,9 +1,12 @@
+use crate::animation::*;
 use crate::ffi_helpers::*;
 use crate::input_inhibitor::{focus_exclusive_client, InputInhibitor};
 use mir_rs::*;
 use std::cmp;
 use std::collections::BTreeMap;
 use std::ptr;
+use std::sync::{Arc, RwLock};
+use std::time::Duration;
 
 pub type Id = u64;
 
@@ -34,10 +37,16 @@ pub struct Window {
   pub size: Size,
   pub is_dragged: bool,
   pub old_state: Option<raw::MirWindowState::Type>,
+  pub animation_state: Arc<WindowAnimaitonState>,
+  pub animation_status: Arc<RwLock<AnimationStatus>>,
 }
 
 impl Window {
-  pub fn new(id_generator: &mut IdGenerator, window_info: *mut miral::WindowInfo) -> Window {
+  pub fn new(
+    id_generator: &mut IdGenerator,
+    animation_state: Arc<WindowAnimaitonState>,
+    window_info: *mut miral::WindowInfo,
+  ) -> Window {
     Window {
       id: id_generator.next_id(),
       on_workspace: None,
@@ -50,6 +59,8 @@ impl Window {
       },
       is_dragged: false,
       old_state: None,
+      animation_state,
+      animation_status: Arc::new(RwLock::new(AnimationStatus::Still)),
     }
   }
 
@@ -58,11 +69,17 @@ impl Window {
   }
 
   pub fn x(&self) -> i32 {
-    unsafe { (&*(*self.window_info).window()).top_left().x.value }
+    match *self.animation_status.read().unwrap() {
+      AnimationStatus::IsAnimating(to) => to.x,
+      AnimationStatus::Still => unsafe { (&*(*self.window_info).window()).top_left().x.value },
+    }
   }
 
   pub fn y(&self) -> i32 {
-    unsafe { (*(*self.window_info).window()).top_left().y.value }
+    match *self.animation_status.read().unwrap() {
+      AnimationStatus::IsAnimating(to) => to.y,
+      AnimationStatus::Still => unsafe { (*(*self.window_info).window()).top_left().y.value },
+    }
   }
 
   pub fn width(&self) -> i32 {
@@ -82,8 +99,8 @@ impl Window {
 
   pub fn rendered_top_left(&self) -> Point {
     Point {
-      x: self.x(),
-      y: self.y(),
+      x: unsafe { (&*(*self.window_info).window()).top_left().x.value },
+      y: unsafe { (*(*self.window_info).window()).top_left().y.value },
     }
   }
 
@@ -122,8 +139,16 @@ impl Window {
     unsafe { (*(*self.window_info).window()).resize(&size) }
   }
 
-  pub fn move_to(&mut self, x: i32, y: i32) {
-    unsafe { (*(*self.window_info).window()).move_to(mir::geometry::Point::new(x, y)) }
+  pub fn move_to(&mut self, top_left: Point) {
+    *self.animation_status.write().unwrap() = AnimationStatus::IsAnimating(top_left);
+    self.animation_state.start_animation(
+      MoveWindow::new(self.window_info, self.animation_status.clone())
+        .animate_to(Duration::from_millis(150), top_left),
+    );
+  }
+
+  pub fn set_position(&mut self, top_left: Point) {
+    unsafe { (*(*self.window_info).window()).move_to(top_left.into()) }
   }
 
   pub fn type_(&self) -> raw::MirWindowType::Type {
@@ -189,6 +214,53 @@ impl Window {
     unsafe { (*wm.tools).ask_client_to_close((*self.window_info).window()) };
   }
 }
+
+#[derive(Debug)]
+pub enum AnimationStatus {
+  Still,
+  IsAnimating(Point),
+}
+
+#[derive(Debug)]
+pub struct MoveWindow {
+  window_info: *mut miral::WindowInfo,
+  status: Arc<RwLock<AnimationStatus>>,
+}
+
+unsafe impl Send for MoveWindow {}
+unsafe impl Sync for MoveWindow {}
+
+impl MoveWindow {
+  pub fn new(window_info: *mut miral::WindowInfo, status: Arc<RwLock<AnimationStatus>>) -> Self {
+    MoveWindow {
+      window_info,
+      status,
+    }
+  }
+}
+
+impl AnimationTarget<Point> for MoveWindow {
+  fn get_value(&self) -> Point {
+    Point {
+      x: unsafe { (&*(*self.window_info).window()).top_left().x.value },
+      y: unsafe { (*(*self.window_info).window()).top_left().y.value },
+    }
+  }
+
+  fn set_value(&mut self, top_left: Point) {
+    unsafe { (*(*self.window_info).window()).move_to(top_left.into()) };
+  }
+
+  fn is_same(&self, other: &Self) -> bool {
+    self.window_info == other.window_info
+  }
+
+  fn animation_ended(&self) {
+    *self.status.write().unwrap() = AnimationStatus::Still
+  }
+}
+
+pub type WindowAnimaitonState = AnimaitonState<Point, MoveWindow>;
 
 #[derive(Debug)]
 pub struct Workspace {
@@ -285,6 +357,8 @@ pub struct WindowManager {
   pub active_window: Option<Id>,
   pub active_workspace: Id,
   pub new_window_workspace: Id,
+
+  pub animation_state: Arc<WindowAnimaitonState>,
 }
 
 impl WindowManager {

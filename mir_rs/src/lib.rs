@@ -5,6 +5,9 @@ pub use ffi::root::{mir, miral};
 use std::ops::{Add, Range, Sub};
 use xkbcommon::xkb;
 
+unsafe impl Send for miral::WindowInfo {}
+unsafe impl Sync for miral::WindowInfo {}
+
 pub trait AsOption<T> {
   fn as_ref(&self) -> Option<&T>;
   fn as_mut(&mut self) -> Option<&mut T>;

@@ -102,7 +102,7 @@ pub fn update_window_positions(wm: &mut WindowManager, workspace_id: Id) -> () {
 
     if old_x != x || old_y != y {
       let window = wm.windows.get_mut(&window_id).unwrap();
-      window.move_to(x, y);
+      window.move_to(Point { x, y });
     }
   }
 }

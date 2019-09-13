@@ -1,4 +1,5 @@
 mod actions;
+mod animation;
 mod entities;
 mod ffi_helpers;
 mod input_inhibitor;
@@ -14,6 +15,8 @@ use crate::pointer::*;
 use mir_rs::*;
 use std::collections::BTreeMap;
 use std::mem::transmute;
+use std::sync::Arc;
+use std::time::{Duration, SystemTime};
 
 fn is_tiled(window: &miral::WindowSpecification) -> bool {
   let has_parent = unsafe { window_specification_has_parent(window) };
@@ -50,6 +53,7 @@ pub extern "C" fn init_wm(
   input_inhibitor: *mut InputInhibitor,
 ) -> *mut WindowManager {
   let input_inhibitor = unsafe { Box::from_raw(input_inhibitor) };
+  let animation_state = Arc::new(WindowAnimaitonState::new());
   let mut wm = WindowManager {
     tools,
     input_inhibitor,
@@ -66,10 +70,24 @@ pub extern "C" fn init_wm(
     active_window: None,
     active_workspace: 0,
     new_window_workspace: 0,
+
+    animation_state: animation_state.clone(),
   };
 
   wm.active_workspace = wm.get_or_create_unused_workspace();
   wm.new_window_workspace = wm.active_workspace;
+
+  std::thread::spawn(move || {
+    let mut time = SystemTime::now();
+    loop {
+      std::thread::sleep(Duration::from_millis(16));
+      let old_time = time;
+      time = SystemTime::now();
+      if let Ok(elapsed_time) = time.duration_since(old_time) {
+        animation_state.step(elapsed_time);
+      }
+    }
+  });
 
   unsafe { transmute(Box::new(wm)) }
 }
@@ -123,7 +141,11 @@ pub extern "C" fn handle_window_ready(
   let wm = unsafe { &mut *wm };
   let window_info = unsafe { &mut *window_info };
 
-  let mut window = Window::new(&mut wm.window_id_generator, window_info);
+  let mut window = Window::new(
+    &mut wm.window_id_generator,
+    wm.animation_state.clone(),
+    window_info,
+  );
   window.x = window.x();
   window.y = window.y();
   window.size = window.rendered_size();
