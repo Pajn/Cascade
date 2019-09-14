@@ -93,6 +93,12 @@ pub fn handle_key_press(
         .expect("failed to execute process");
       true
     }
+    xkb::KEY_l if modifiers == input_event_modifier::META_LEFT => {
+      Command::new("swaylock")
+        .spawn()
+        .expect("failed to execute process");
+      true
+    }
     xkb::KEY_d if modifiers == input_event_modifier::META_LEFT => {
       println!("WM: {:?}", wm);
       for window in wm.windows.values() {
