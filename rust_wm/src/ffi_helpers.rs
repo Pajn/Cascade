@@ -34,6 +34,7 @@ extern "C" {
     client: *const raw::wl_client,
     window: *const miral::WindowInfo,
   ) -> bool;
+  pub fn set_keymap(keymap_ctrl: *mut miral::Keymap, keymap: *const c_char) -> ();
 }
 
 #[derive(Clone)]

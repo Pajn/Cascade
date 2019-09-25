@@ -42,6 +42,8 @@ int main(int argc, char const* argv[])
 {
     MirRunner runner{argc, argv};
 
+    auto keymap = Keymap{};
+    auto ipc_server = rust::init_ipc_server();
     auto input_inhibitor = rust::input_inhibitor_new();
     cascade::Wallpaper wallpaper;
 
@@ -104,8 +106,8 @@ int main(int argc, char const* argv[])
             StartupInternalClient{std::ref(wallpaper)},
             external_client_launcher,
             StartupInternalClient{std::ref(launcher)},
-            Keymap{},
+            keymap,
             AppendEventFilter{keyboard_shortcuts},
-            set_window_management_policy<cascade::WindowManagerPolicy>(input_inhibitor, wallpaper, launcher)
+            set_window_management_policy<cascade::WindowManagerPolicy>(ipc_server, input_inhibitor, keymap, wallpaper, launcher)
         });
 }

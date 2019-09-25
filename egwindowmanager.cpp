@@ -72,14 +72,14 @@ void cascade::WindowManagerPolicy::keep_size_within_limits(
     }
 }
 
-cascade::WindowManagerPolicy::WindowManagerPolicy(WindowManagerTools const& tools, rust::InputInhibitor* input_inhibitor, Wallpaper const& wallpaper, Launcher const& launcher) :
+cascade::WindowManagerPolicy::WindowManagerPolicy(WindowManagerTools const& tools, rust::IpcServer const* ipc_server, rust::InputInhibitor* input_inhibitor, Keymap& keymap, Wallpaper const& wallpaper, Launcher const& launcher) :
     MinimalWindowManager{tools},
     input_inhibitor{input_inhibitor},
     wallpaper{&wallpaper},
     launcher{&launcher}
 {
     this->tools = std::make_shared<WindowManagerTools>(tools);
-    wm = rust::init_wm(this->tools.get(), this->input_inhibitor);
+    wm = rust::init_wm(this->tools.get(), ipc_server, this->input_inhibitor, &keymap);
 }
 
 miral::WindowSpecification cascade::WindowManagerPolicy::place_new_window(

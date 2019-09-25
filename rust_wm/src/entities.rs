@@ -1,6 +1,8 @@
 use crate::animation::*;
 use crate::ffi_helpers::*;
 use crate::input_inhibitor::{focus_exclusive_client, InputInhibitor};
+use crate::ipc_server::*;
+use crate::keymap::*;
 use mir_rs::*;
 use std::cmp;
 use std::collections::BTreeMap;
@@ -343,6 +345,8 @@ pub enum Gesture {
 #[derive(Debug)]
 pub struct WindowManager {
   pub tools: *mut miral::WindowManagerTools,
+  pub ipc_server: &'static IpcServer,
+  pub keymap: Keymap,
   pub input_inhibitor: Box<InputInhibitor>,
   pub monitor_id_generator: IdGenerator,
   pub window_id_generator: IdGenerator,

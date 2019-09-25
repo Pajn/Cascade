@@ -8,7 +8,9 @@ edition = "2018"
 crate-type = ["staticlib", "cdylib"]
 
 [dependencies]
+ipc-channel = "0.12.0"
 mir_rs = { path = "../mir_rs"}
+serde = "1.0"
 xkbcommon = "0.4.0"
 
 [build-dependencies]

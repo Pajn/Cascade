@@ -35,7 +35,7 @@ class WindowManagerPolicy :
     public WindowManagementPolicy::ApplicationZoneAddendum
 {
 public:
-    WindowManagerPolicy(WindowManagerTools const& tools, rust::InputInhibitor* input_inhibitor, Wallpaper const& wallpaper, Launcher const& launcher);
+    WindowManagerPolicy(WindowManagerTools const& tools, rust::IpcServer const* ipc_server, rust::InputInhibitor* input_inhibitor, Keymap& keymap, Wallpaper const& wallpaper, Launcher const& launcher);
 
     auto place_new_window(ApplicationInfo const& app_info, WindowSpecification const& request_parameters)
         -> WindowSpecification override;

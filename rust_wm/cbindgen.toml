@@ -22,6 +22,7 @@ namespaces = []
 sys_includes = [
   "mir_toolkit/events/event.h",
   "mir_toolkit/events/input/input_event.h",
+  "miral/keymap.h",
   "miral/output.h",
   "miral/window_management_policy.h",
   "miral/window_manager_tools.h",
@@ -60,6 +61,9 @@ style = "both"
 [export]
 include = []
 exclude = [
+  "optional_some_rectangle",
+  "optional_none_rectangle",
+  "new_window_specification",
   "window_specification_name",
   "configure_window",
   "hide_window",
@@ -75,6 +79,7 @@ exclude = [
   "select_active_window",
   "client_is_alive",
   "client_owns_window",
+  "set_keymap",
 ]
 # prefix = "CAPI_"
 item_types = []

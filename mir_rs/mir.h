@@ -1,5 +1,6 @@
 #include <mir_toolkit/events/event.h>
 #include <mir_toolkit/events/input/input_event.h>
+#include <miral/keymap.h>
 #include <miral/output.h>
 #include <miral/wayland_extensions.h>
 #include <miral/window_management_policy.h>

@@ -1,4 +1,5 @@
 #include <mir/scene/surface.h>
+#include <miral/keymap.h>
 #include <miral/wayland_extensions.h>
 #include <miral/window_info.h>
 #include <miral/window_manager_tools.h>
@@ -103,4 +104,10 @@ extern "C" auto client_is_alive(wl_client* client) -> bool
 extern "C" auto client_owns_window(wl_client* client, miral::WindowInfo const* window) -> bool
 {
     return miral::pid_of(miral::application_for(client)) == miral::pid_of(window->window().application());
+}
+
+extern "C" auto set_keymap(miral::Keymap keymap_ctrl, char* keymap) -> void
+{
+    printf("ffi_keymap %s\n", keymap);
+    keymap_ctrl.set_keymap(keymap);
 }

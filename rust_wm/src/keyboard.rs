@@ -87,6 +87,10 @@ pub fn handle_key_press(
       move_window_monitor(wm, Direction::Right, Activation::LastActive);
       true
     }
+    xkb::KEY_space if modifiers == input_event_modifier::META_LEFT => {
+      wm.keymap.set_next_keymap();
+      true
+    }
     xkb::KEY_a if modifiers == input_event_modifier::META_LEFT => {
       Command::new("ulauncher-toggle")
         .spawn()

@@ -3,14 +3,18 @@ mod animation;
 mod entities;
 mod ffi_helpers;
 mod input_inhibitor;
+mod ipc_server;
 mod keyboard;
+mod keymap;
 mod pointer;
 
 use crate::actions::*;
 use crate::entities::*;
 use crate::ffi_helpers::*;
 use crate::input_inhibitor::{focus_exclusive_client, InputInhibitor};
+use crate::ipc_server::*;
 use crate::keyboard::*;
+use crate::keymap::*;
 use crate::pointer::*;
 use mir_rs::*;
 use std::collections::BTreeMap;
@@ -50,12 +54,18 @@ fn is_tiled(window: &miral::WindowSpecification) -> bool {
 #[no_mangle]
 pub extern "C" fn init_wm(
   tools: *mut miral::WindowManagerTools,
+  ipc_server: *const IpcServer,
   input_inhibitor: *mut InputInhibitor,
+  keymap_ctrl: *mut miral::Keymap,
 ) -> *mut WindowManager {
+  let ipc_server = unsafe { &*ipc_server };
   let input_inhibitor = unsafe { Box::from_raw(input_inhibitor) };
+  let keymap = Keymap::new(ipc_server, keymap_ctrl);
   let animation_state = Arc::new(WindowAnimaitonState::new());
   let mut wm = WindowManager {
     tools,
+    ipc_server,
+    keymap,
     input_inhibitor,
     monitor_id_generator: IdGenerator::new(),
     window_id_generator: IdGenerator::new(),
