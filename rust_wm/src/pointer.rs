@@ -67,6 +67,9 @@ pub extern "C" fn handle_pointer_event(
           let window = wm.windows.get_mut(&window_id).unwrap();
           if !window.is_dragged {
             window.is_dragged = true;
+            unsafe {
+              (*window.window_info).clip_area1(&optional_none_rectangle());
+            }
           }
 
           let window = wm.get_window(window_id);

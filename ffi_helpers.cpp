@@ -1,8 +1,23 @@
+#include <mir/optional_value.h>
+#include <mir/geometry/rectangle.h>
 #include <mir/scene/surface.h>
 #include <miral/wayland_extensions.h>
 #include <miral/window_info.h>
 #include <miral/window_manager_tools.h>
 #include <wayland-server-core.h>
+
+extern "C" auto optional_some_rectangle(mir::geometry::Rectangle value) -> mir::optional_value<mir::geometry::Rectangle> {
+    return mir::optional_value(value);
+}
+extern "C" auto optional_none_rectangle() -> mir::optional_value<mir::geometry::Rectangle> {
+    return mir::optional_value<mir::geometry::Rectangle>();
+}
+
+extern "C" auto new_window_specification() -> miral::WindowSpecification
+{
+    miral::WindowSpecification specification;
+    return specification;
+}
 
 extern "C" auto window_specification_name(miral::WindowSpecification& specification) -> const char*
 {

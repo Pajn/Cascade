@@ -4,6 +4,11 @@ use std::os::raw::c_char;
 
 #[allow(unused)]
 extern "C" {
+  pub fn optional_some_rectangle(
+    value: mir::geometry::Rectangle,
+  ) -> mir::optional_value<mir::geometry::Rectangle>;
+  pub fn optional_none_rectangle() -> mir::optional_value<mir::geometry::Rectangle>;
+  pub fn new_window_specification() -> miral::WindowSpecification;
   pub fn window_specification_name(window_info: *const miral::WindowSpecification)
     -> *const c_char;
   pub fn configure_window(

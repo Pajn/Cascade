@@ -1,4 +1,5 @@
 use crate::entities::*;
+use crate::ffi_helpers::*;
 use mir_rs::*;
 use std::cmp;
 use std::cmp::Ordering;
@@ -94,6 +95,17 @@ pub fn update_window_positions(wm: &mut WindowManager, workspace_id: Id) -> () {
     let x = window.x - scroll_left;
     let y = window.y;
     let size = window.size.clone();
+
+    if let Some(monitor) = wm
+      .get_workspace(workspace_id)
+      .on_monitor
+      .and_then(|id| wm.monitors.get(&id))
+    {
+      let area = monitor.extents.clone();
+      unsafe {
+        (*window.window_info).clip_area1(&optional_some_rectangle(area.into()));
+      }
+    }
 
     if size != old_size {
       let window = wm.windows.get_mut(&window_id).unwrap();
