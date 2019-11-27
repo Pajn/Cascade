@@ -1,9 +1,12 @@
-use crate::entities::*;
-use mir_rs::*;
+use log::debug;
 use std::cmp;
 use std::cmp::Ordering;
+use wlral::geometry::*;
 
-fn update_cached_positions(wm: &mut WindowManager, workspace_id: Id) -> () {
+use crate::entities::*;
+use crate::window_manager::CascadeWindowManager;
+
+fn update_cached_positions(wm: &mut CascadeWindowManager, workspace_id: Id) -> () {
   let monitor = wm.monitor_by_workspace(workspace_id);
   let positions = wm
     .get_workspace(workspace_id)
@@ -18,11 +21,14 @@ fn update_cached_positions(wm: &mut WindowManager, workspace_id: Id) -> () {
         None
       }
     })
-    .scan(monitor.map_or(0, |m| m.extents.left()), |next_x, window| {
-      let x = *next_x;
-      *next_x = x + window.size.width;
-      Some((window.id, x))
-    })
+    .scan(
+      monitor.map_or(0, |m| m.extents().left()),
+      |next_x, window| {
+        let x = *next_x;
+        *next_x = x + window.size().width;
+        Some((window.id, x))
+      },
+    )
     .collect::<Vec<_>>();
 
   for (window_id, x) in positions {
@@ -30,30 +36,33 @@ fn update_cached_positions(wm: &mut WindowManager, workspace_id: Id) -> () {
     let window = wm.get_window(window_id);
 
     let height = match monitor {
-      Some(monitor) => cmp::min(monitor.extents.height(), window.max_height()),
-      None => window.height(),
+      Some(monitor) => cmp::min(monitor.extents().height(), window.max_height()),
+      None => window.size().height,
     };
 
     let y = match monitor {
-      Some(monitor) => monitor.extents.top() + (monitor.extents.height() - height) / 2,
-      None => window.y(),
+      Some(monitor) => monitor.extents().top() + (monitor.extents().height() - height) / 2,
+      None => window.top_left().y,
     };
 
     let window = wm.windows.get_mut(&window_id).unwrap();
 
-    window.x = x;
-    window.y = y;
-    window.size.height = height;
+    println!("x={}", x);
+
+    window.set_position(Rectangle {
+      top_left: Point { x, y },
+      size: window.size().with_height(height),
+    })
   }
 }
 
-pub fn ensure_window_visible(wm: &mut WindowManager, window_id: Id) -> () {
+pub fn ensure_window_visible(wm: &mut CascadeWindowManager, window_id: Id) -> () {
   if let Some(monitor) = wm.monitor_by_window(window_id) {
-    let extents_left = monitor.extents.left();
-    let extents_right = monitor.extents.right();
+    let extents_left = monitor.extents().left();
+    let extents_right = monitor.extents().right();
     let window = wm.get_window(window_id);
-    let window_x = window.x;
-    let window_width = window.width();
+    let window_x = window.top_left().x;
+    let window_width = window.size().width();
     let workspace_id = window.on_workspace.unwrap();
     let workspace = wm.workspaces.get_mut(&workspace_id).unwrap();
 
@@ -63,10 +72,21 @@ pub fn ensure_window_visible(wm: &mut WindowManager, window_id: Id) -> () {
     let x_workspace_left = workspace.scroll_left + extents_left;
     let x_workspace_right = workspace.scroll_left + extents_right;
 
+    println!(
+      "window_x={} window_width={} x_workspace_left={} x_workspace_right={}",
+      window_x, window_width, x_workspace_left, x_workspace_right
+    );
+    println!(
+      "extents_left={} extents_right={}",
+      extents_left, extents_right
+    );
+
     if x_window_left < x_workspace_left {
       workspace.scroll_left = x_window_left - extents_left;
+      debug!("Scrolling left to {}", workspace.scroll_left);
     } else if x_window_right > x_workspace_right {
       workspace.scroll_left = x_window_right - extents_right;
+      debug!("Scrolling right to {}", workspace.scroll_left);
     }
   } else {
     println!(
@@ -76,41 +96,25 @@ pub fn ensure_window_visible(wm: &mut WindowManager, window_id: Id) -> () {
   }
 }
 
-pub fn update_window_positions(wm: &mut WindowManager, workspace_id: Id) -> () {
+pub fn update_window_positions(wm: &mut CascadeWindowManager, workspace_id: Id) -> () {
   let workspace = wm.get_workspace(workspace_id);
   let scroll_left = workspace.scroll_left;
 
   for window_id in workspace.windows.clone() {
-    let window = wm.get_window(window_id);
+    let window = wm.get_window_mut(window_id);
 
     if window.is_dragged {
       continue;
     }
 
-    let old_x = window.x();
-    let old_y = window.y();
-    let old_size = window.rendered_size();
-
-    let x = window.x - scroll_left;
-    let y = window.y;
-    let size = window.size.clone();
-
-    if size != old_size {
-      let window = wm.windows.get_mut(&window_id).unwrap();
-      window.resize(size);
-    }
-
-    if old_x != x || old_y != y {
-      let window = wm.windows.get_mut(&window_id).unwrap();
-      window.move_to(Point { x, y });
-    }
+    window.commit_position(scroll_left);
   }
 }
 
-pub fn arrange_windows_workspace(wm: &mut WindowManager, workspace_id: Id) -> () {
+pub fn arrange_windows_workspace(wm: &mut CascadeWindowManager, workspace_id: Id) -> () {
   update_cached_positions(wm, workspace_id);
   let workspace = wm.get_workspace(workspace_id);
-  if let Some(active_window_id) = workspace.active_window {
+  if let Some(active_window_id) = workspace.active_window() {
     let active_window = wm.get_window(active_window_id);
     if active_window.is_tiled() {
       ensure_window_visible(wm, active_window_id);
@@ -119,7 +123,7 @@ pub fn arrange_windows_workspace(wm: &mut WindowManager, workspace_id: Id) -> ()
   update_window_positions(wm, workspace_id);
 }
 
-pub fn arrange_windows(wm: &mut WindowManager) -> () {
+pub fn arrange_windows(wm: &mut CascadeWindowManager) -> () {
   arrange_windows_workspace(wm, wm.active_workspace);
 }
 
@@ -135,19 +139,23 @@ pub enum VerticalDirection {
   Down,
 }
 
-pub fn naviate_first(wm: &mut WindowManager) {
+pub fn navigate_first(wm: &mut CascadeWindowManager) {
   if let Some(window_id) = wm.active_workspace().windows.first().copied() {
     wm.focus_window(Some(window_id));
   }
 }
 
-pub fn naviate_last(wm: &mut WindowManager) {
+pub fn navigate_last(wm: &mut CascadeWindowManager) {
   if let Some(window_id) = wm.active_workspace().windows.last().copied() {
     wm.focus_window(Some(window_id));
   }
 }
 
-pub fn get_tiled_window(wm: &WindowManager, window_id: Id, direction: Direction) -> Option<Id> {
+pub fn get_tiled_window(
+  wm: &CascadeWindowManager,
+  window_id: Id,
+  direction: Direction,
+) -> Option<Id> {
   let window = wm.get_window(window_id);
   let workspace = wm.get_workspace(window.on_workspace.unwrap());
   let index = workspace
@@ -165,24 +173,24 @@ pub fn get_tiled_window(wm: &WindowManager, window_id: Id, direction: Direction)
   }
 }
 
-pub fn naviate(wm: &mut WindowManager, direction: Direction) {
+pub fn navigate(wm: &mut CascadeWindowManager, direction: Direction) {
   if let Some(active_window) = wm.active_window {
     if wm.get_window(active_window).is_tiled() {
       if let Some(other_window) = get_tiled_window(wm, active_window, direction) {
         wm.focus_window(Some(other_window));
       } else {
-        naviate_monitor(wm, direction, Activation::FromDirection);
+        navigate_monitor(wm, direction, Activation::FromDirection);
       }
     }
   } else {
     match direction {
-      Direction::Left => naviate_first(wm),
-      Direction::Right => naviate_last(wm),
+      Direction::Left => navigate_first(wm),
+      Direction::Right => navigate_last(wm),
     }
   }
 }
 
-pub fn move_window(wm: &mut WindowManager, direction: Direction) {
+pub fn move_window(wm: &mut CascadeWindowManager, direction: Direction) {
   if let Some(active_window) = wm.active_window {
     if let Some(workspace_id) = wm.get_window(active_window).on_workspace {
       if let Some(other_window) = get_tiled_window(wm, active_window, direction) {
@@ -199,7 +207,7 @@ pub fn move_window(wm: &mut WindowManager, direction: Direction) {
 }
 
 pub fn monitor_x_position(a: &&Monitor, b: &&Monitor) -> Ordering {
-  a.extents.left().cmp(&b.extents.left())
+  a.extents().left().cmp(&b.extents().left())
 }
 
 pub enum Activation {
@@ -207,7 +215,11 @@ pub enum Activation {
   FromDirection,
 }
 
-pub fn naviate_monitor(wm: &mut WindowManager, direction: Direction, activation: Activation) {
+pub fn navigate_monitor(
+  wm: &mut CascadeWindowManager,
+  direction: Direction,
+  activation: Activation,
+) {
   if let Some(current_monitor) = wm.active_workspace().on_monitor {
     let mut monitors = wm.monitors.values().collect::<Vec<_>>();
     monitors.sort_by(monitor_x_position);
@@ -231,7 +243,7 @@ pub fn naviate_monitor(wm: &mut WindowManager, direction: Direction, activation:
         let window = match (activation, direction) {
           (Activation::LastActive, _) => wm
             .get_workspace(monitor.workspace)
-            .active_window
+            .active_window()
             .or_else(|| wm.get_workspace(monitor.workspace).windows.last().cloned()),
           (Activation::FromDirection, Direction::Left) => {
             wm.get_workspace(monitor.workspace).windows.last().cloned()
@@ -249,7 +261,7 @@ pub fn naviate_monitor(wm: &mut WindowManager, direction: Direction, activation:
   }
 }
 
-pub fn find_index_by_cursor(wm: &WindowManager, workspace_id: Id, cursor: &Point) -> usize {
+pub fn find_index_by_cursor(wm: &CascadeWindowManager, workspace_id: Id, cursor: &Point) -> usize {
   let workspace = wm.get_workspace(workspace_id);
   let mut max_x = None;
   for (index, window_id) in workspace.windows.iter().cloned().enumerate() {
@@ -257,8 +269,8 @@ pub fn find_index_by_cursor(wm: &WindowManager, workspace_id: Id, cursor: &Point
     if window.is_tiled() {
       let pos = window.rendered_pos();
 
-      if pos.x_axis().contains(&cursor.x) {
-        if cursor.x < pos.x_center() {
+      if pos.left() <= cursor.x && pos.right() >= cursor.x {
+        if cursor.x < pos.right() - pos.width() / 2 {
           return index;
         } else {
           return index + 1;
@@ -266,7 +278,7 @@ pub fn find_index_by_cursor(wm: &WindowManager, workspace_id: Id, cursor: &Point
       }
 
       if max_x == None || Some(pos.right()) > max_x {
-        max_x = Some(window.x());
+        max_x = Some(pos.top_left().x());
       }
     }
   }
@@ -279,7 +291,7 @@ pub fn find_index_by_cursor(wm: &WindowManager, workspace_id: Id, cursor: &Point
 }
 
 pub fn move_window_workspace(
-  wm: &mut WindowManager,
+  wm: &mut CascadeWindowManager,
   window_id: Id,
   to_workspace_id: Id,
   index: usize,
@@ -287,7 +299,7 @@ pub fn move_window_workspace(
   let to_workspace = wm.workspaces.get_mut(&to_workspace_id).unwrap();
 
   to_workspace.windows.insert(index, window_id);
-  to_workspace.active_window = Some(window_id);
+  to_workspace.mru_windows.push(window_id);
   wm.active_workspace = to_workspace_id;
   wm.new_window_workspace = to_workspace_id;
 
@@ -304,7 +316,11 @@ pub fn move_window_workspace(
   }
 }
 
-pub fn move_window_monitor(wm: &mut WindowManager, direction: Direction, activation: Activation) {
+pub fn move_window_monitor(
+  wm: &mut CascadeWindowManager,
+  direction: Direction,
+  activation: Activation,
+) {
   if let Some(active_window) = wm.active_window {
     let window = wm.get_window(active_window);
     if let Some(from_workspace_id) = window.on_workspace {
@@ -332,7 +348,7 @@ pub fn move_window_monitor(wm: &mut WindowManager, direction: Direction, activat
 
             let index = match (activation, direction) {
               (Activation::LastActive, _) => to_workspace
-                .active_window
+                .active_window()
                 .and_then(|w| to_workspace.get_window_index(w).map(|i| i + 1))
                 .unwrap_or(to_workspace.windows.len()),
               (Activation::FromDirection, Direction::Left) => to_workspace.windows.len(),
@@ -350,7 +366,7 @@ pub fn move_window_monitor(wm: &mut WindowManager, direction: Direction, activat
   }
 }
 
-pub fn switch_workspace(wm: &mut WindowManager, direction: VerticalDirection) {
+pub fn switch_workspace(wm: &mut CascadeWindowManager, direction: VerticalDirection) {
   let mut hidden_workspaces = wm
     .workspaces
     .values()
@@ -379,7 +395,7 @@ pub fn switch_workspace(wm: &mut WindowManager, direction: VerticalDirection) {
       .unwrap(),
   };
   let next_workspace_id = next_workspace.id;
-  let next_active_window = next_workspace.active_window;
+  let next_active_window = next_workspace.active_window();
 
   let current_workspace = wm.workspaces.get_mut(&current_workspace_id).unwrap();
   let monitor_id = current_workspace.on_monitor.unwrap();
@@ -403,63 +419,61 @@ pub fn switch_workspace(wm: &mut WindowManager, direction: VerticalDirection) {
   }
 }
 
-pub fn apply_resize_by(wm: &mut WindowManager, displacement: Displacement) -> () {
-  if let Gesture::Resize(ref gesture) = wm.gesture {
-    let old_pos = gesture.top_left;
-    let old_size = gesture.size;
-    let mut new_pos = old_pos.clone();
-    let mut new_size = old_size.clone();
+// pub fn apply_resize_by(wm: &mut CascadeWindowManager, displacement: Displacement) -> () {
+//   if let Gesture::Resize(ref gesture, ref rect) = wm.gesture {
+//     let old_pos = rect.top_left;
+//     let old_size = rect.size;
+//     let mut new_pos = old_pos.clone();
+//     let mut new_size = old_size.clone();
+//     let window_id = match wm.window_by_info(gesture.window.clone()) {
+//       Some(window) => window.id,
+//       None => return,
+//     };
 
-    if gesture.edge
-      & (raw::MirResizeEdge::mir_resize_edge_west | raw::MirResizeEdge::mir_resize_edge_east)
-      > 0
-    {}
+//     if gesture.edges.contains(WindowEdge::RIGHT) {
+//       new_size.width = old_size.width + displacement.dx;
+//     }
 
-    if gesture.edge & raw::MirResizeEdge::mir_resize_edge_east > 0 {
-      new_size.width = old_size.width + displacement.dx;
-    }
+//     if gesture.edges.contains(WindowEdge::LEFT) {
+//       let requested_width = old_size.width - displacement.dx;
+//       let window = wm.get_window(window_id);
 
-    if gesture.edge & raw::MirResizeEdge::mir_resize_edge_west > 0 {
-      let requested_width = old_size.width - displacement.dx;
-      let window = wm.get_window(gesture.window);
+//       new_size.width = cmp::max(
+//         cmp::min(requested_width, window.max_width()),
+//         window.min_width(),
+//       );
+//       new_pos.x = old_pos.x + displacement.dx + (requested_width - new_size.width);
 
-      new_size.width = cmp::max(
-        cmp::min(requested_width, window.max_width()),
-        window.min_width(),
-      );
-      new_pos.x = old_pos.x + displacement.dx + (requested_width - new_size.width);
+//       if let Some(workspace_id) = window.on_workspace {
+//         let workspace = wm.workspaces.get_mut(&workspace_id).unwrap();
+//         workspace.scroll_left -= displacement.dx;
+//       }
+//     }
 
-      if let Some(workspace_id) = window.on_workspace {
-        let workspace = wm.workspaces.get_mut(&workspace_id).unwrap();
-        workspace.scroll_left -= displacement.dx;
-      }
-    }
+//     if gesture.edges.contains(WindowEdge::TOP) {
+//       new_size.height = old_size.height - displacement.dy;
+//       new_pos.y = old_pos.y + displacement.dy;
+//     }
 
-    if gesture.edge & raw::MirResizeEdge::mir_resize_edge_north > 0 {
-      new_size.height = old_size.height - displacement.dy;
-      new_pos.y = old_pos.y + displacement.dy;
-    }
+//     if gesture.edges.contains(WindowEdge::BOTTOM) {
+//       new_size.height = old_size.height + displacement.dy;
+//     }
 
-    if gesture.edge & raw::MirResizeEdge::mir_resize_edge_south > 0 {
-      new_size.height = old_size.height + displacement.dy;
-    }
-
-    let window_id = gesture.window;
-    if let Some(workspace_id) = wm.get_window(window_id).on_workspace {
-      if new_pos != old_pos || new_size != old_size {
-        if new_size != old_size {
-          let window = wm.windows.get_mut(&window_id).unwrap();
-          window.resize(new_size);
-        }
-        arrange_windows_workspace(wm, workspace_id);
-      }
-    }
-    if wm.active_window != Some(window_id) {
-      wm.focus_window(Some(window_id));
-    }
-    if let Gesture::Resize(ref mut gesture) = wm.gesture {
-      gesture.top_left = new_pos;
-      gesture.size = new_size;
-    }
-  }
-}
+//     if let Some(workspace_id) = wm.get_window(window_id).on_workspace {
+//       if new_pos != old_pos || new_size != old_size {
+//         if new_size != old_size {
+//           let window = wm.windows.get_mut(&window_id).unwrap();
+//           window.resize(new_size);
+//         }
+//         arrange_windows_workspace(wm, workspace_id);
+//       }
+//     }
+//     if wm.active_window != Some(window_id) {
+//       wm.focus_window(Some(window_id));
+//     }
+//     if let Gesture::Resize(_, ref mut rect) = wm.gesture {
+//       rect.top_left = new_pos;
+//       rect.size = new_size;
+//     }
+//   }
+// }

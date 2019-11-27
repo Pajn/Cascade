@@ -1,11 +1,11 @@
 [package]
-name = "mir_rs"
+name = "cascade"
 version = "0.1.0"
 authors = ["Rasmus Eneman <rasmus@eneman.eu>"]
 edition = "2018"
 
 [dependencies]
+env_logger = "0.7"
+log = "0.4"
+wlral = { path = "../wlral/wlral"}
 xkbcommon = "0.4.0"
-
-[build-dependencies]
-bindgen = "0.51.0"

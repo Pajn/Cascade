@@ -1,5 +1,0 @@
-[Desktop Entry]
-Name=Cascade
-Comment=The example Mir server
-Exec=cascade-launch
-Type=Application

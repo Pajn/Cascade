@@ -1,7 +1,7 @@
-use mir_rs::*;
 use std::any::Any;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
+use wlral::geometry::*;
 
 pub trait AnimatableValue: Copy {
   fn intermediate_value(step: f64, from: &Self, to: &Self) -> Self;

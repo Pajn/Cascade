@@ -1,7 +1,8 @@
-use crate::entities::*;
-use crate::ffi_helpers::*;
 use mir_rs::raw::wl_client;
 use std::mem::transmute;
+
+use crate::entities::*;
+use crate::ffi_helpers::*;
 
 #[derive(Debug)]
 pub struct InputInhibitor {

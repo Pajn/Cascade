@@ -1,5 +1,0 @@
-/target
-**/*.rs.bk
-Cargo.lock
-rust_wm.h
-rust_wm.h.new
