@@ -1,5 +1,4 @@
 use log::debug;
-use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
 use wlral::geometry::*;
@@ -17,14 +16,12 @@ use crate::keyboard::handle_key_press;
 use crate::pointer;
 
 pub struct CascadeWindowManager {
-  pub output_manager: Rc<RefCell<dyn OutputManager>>,
-  pub window_manager: Rc<RefCell<WindowManager>>,
+  pub output_manager: Rc<OutputManager>,
+  pub window_manager: Rc<WindowManager>,
 
   pub gesture: Gesture,
   pub restore_size: BTreeMap<usize, Rectangle>,
 
-  // pub tools: *mut miral::WindowManagerTools,
-  // pub input_inhibitor: Box<InputInhibitor>,
   pub monitor_id_generator: IdGenerator,
   pub window_id_generator: IdGenerator,
   pub workspace_id_generator: IdGenerator,
@@ -102,11 +99,15 @@ impl CascadeWindowManager {
       .values()
       .find(|m| m.extents().contains(point))
       .and_then(|m| {
-        println!("windows, {:?}", self
-          .get_workspace(m.workspace)
-          .mru_windows
-          .iter()
-          .map(|w| self.get_window(*w).buffer_pos()).collect::<Vec<_>>());
+        println!(
+          "windows, {:?}",
+          self
+            .get_workspace(m.workspace)
+            .mru_windows
+            .iter()
+            .map(|w| self.get_window(*w).buffer_pos())
+            .collect::<Vec<_>>()
+        );
         self
           .get_workspace(m.workspace)
           .mru_windows
@@ -182,8 +183,6 @@ impl CascadeWindowManager {
   }
 
   pub fn delete_window(&mut self, window_id: Id) -> () {
-    // self.input_inhibitor.clear_if_dead();
-
     // Ignore the error as it's normal that windows are not in any workspace
     let _ = self.remove_window_from_workspace(window_id);
     self.windows.remove(&window_id);
@@ -211,7 +210,6 @@ impl CascadeWindowManager {
       self.active_window = Some(window_id);
       self
         .window_manager
-        .borrow_mut()
         .focus_window(self.get_window(window_id).window_info.clone());
       arrange_windows(self);
     }
@@ -244,30 +242,6 @@ impl CascadeWindowManager {
     workspace.mru_windows.remove(&window_id);
     Ok(())
   }
-
-  // pub fn focus_window(&mut self, window_id: Option<Id>) -> () {
-  //   self.active_window = window_id;
-  //   if let Some(window_id) = window_id {
-  //     let window = self.get_window(window_id);
-
-  //     // if self.input_inhibitor.is_allowed(window) {
-  //     // unsafe {
-  //     //   let window_ptr = (*window.window_info).window();
-  //     //   select_active_window(self.tools, window_ptr);
-  //     // }
-  //     // } else {
-  //     //   focus_exclusive_client(self);
-  //     // }
-  //     self
-  //       .window_manager
-  //       .borrow_mut()
-  //       .focus_window(window.window_info.clone());
-  //   } else {
-  //     // unsafe {
-  //     //   select_active_window(self.tools, ptr::null());
-  //     // }
-  //   }
-  // }
 }
 
 impl WindowManagementPolicy for CascadeWindowManager {
@@ -318,11 +292,7 @@ impl WindowManagementPolicy for CascadeWindowManager {
 
     let window = self.get_window(window_id);
     if !window.has_parent() {
-      // if self.input_inhibitor.is_allowed(&window) {
       self.focus_window(Some(window_id));
-      // } else {
-      //   focus_exclusive_client(self);
-      // }
     }
 
     arrange_windows(self);
@@ -331,10 +301,14 @@ impl WindowManagementPolicy for CascadeWindowManager {
   fn advise_configured_window(&mut self, window_info: Rc<WlralWindow>) {
     if let Some(window) = self.window_by_info(window_info.clone()) {
       let window_id = window.id;
-      let new_position = window_info.extents() + Displacement {
-        dx: window.on_workspace.map(|w| self.get_workspace(w).scroll_left).unwrap_or(0),
-        dy: 0,
-      };
+      let new_position = window_info.extents()
+        + Displacement {
+          dx: window
+            .on_workspace
+            .map(|w| self.get_workspace(w).scroll_left)
+            .unwrap_or(0),
+          dy: 0,
+        };
       self.get_window_mut(window_id).current_position = new_position;
     } else {
       println!(
@@ -359,13 +333,6 @@ impl WindowManagementPolicy for CascadeWindowManager {
   }
 
   fn advise_output_create(&mut self, output: Rc<Output>) {
-    output.set_custom_mode(
-      Size {
-        width: 1400,
-        height: 1024,
-      },
-      0,
-    );
     let workspace_id = self.get_or_create_unused_workspace();
     println!("advise_output_create, workspace={}", workspace_id);
     let monitor = Monitor::new(&mut self.monitor_id_generator, workspace_id, output);
@@ -406,11 +373,7 @@ impl WindowManagementPolicy for CascadeWindowManager {
   }
 
   fn handle_request_move(&mut self, request: MoveRequest) {
-    if !self
-      .window_manager
-      .borrow()
-      .window_has_focus(&request.window)
-    {
+    if !self.window_manager.window_has_focus(&request.window) {
       // Deny move requests from unfocused clients
       return;
     }
@@ -425,11 +388,7 @@ impl WindowManagementPolicy for CascadeWindowManager {
     self.gesture = Gesture::Move(request)
   }
   fn handle_request_resize(&mut self, request: ResizeRequest) {
-    if !self
-      .window_manager
-      .borrow()
-      .window_has_focus(&request.window)
-    {
+    if !self.window_manager.window_has_focus(&request.window) {
       // Deny resize requests from unfocused clients
       return;
     }

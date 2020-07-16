@@ -6,10 +6,6 @@ use crate::actions::*;
 use crate::window_manager::CascadeWindowManager;
 
 pub fn handle_key_press(wm: &mut CascadeWindowManager, event: &KeyboardEvent) -> bool {
-  // if wm.input_inhibitor.is_inhibited() {
-  //   return false;
-  // }
-
   let validate_mod = |mod_names: &Vec<&'static str>, mod_name| {
     mod_names.contains(&mod_name)
       == event
@@ -23,7 +19,7 @@ pub fn handle_key_press(wm: &mut CascadeWindowManager, event: &KeyboardEvent) ->
       && validate_mod(&mod_names, xkb::MOD_NAME_ALT)
   };
 
-  if event.state() == xkb::STATE_MODS_DEPRESSED {
+  if event.state() == KeyState::Pressed {
     match event.get_one_sym() {
       xkb::KEY_Home if has_mods(vec![xkb::MOD_NAME_SHIFT]) => {
         navigate_first(wm);
