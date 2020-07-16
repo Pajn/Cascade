@@ -8,14 +8,17 @@ use wlral::output::Output;
 use wlral::output_manager::OutputManager;
 use wlral::window::Window as WlralWindow;
 use wlral::window_management_policy::*;
-use wlral::window_manager::WindowManager;
+use wlral::{config::ConfigManager, window_manager::WindowManager};
 
 use crate::actions::*;
 use crate::entities::{Gesture, Id, IdGenerator, Monitor, Window, Workspace};
 use crate::keyboard::handle_key_press;
-use crate::pointer;
+use crate::{config::Config, pointer};
 
 pub struct CascadeWindowManager {
+  pub config: Config,
+
+  pub config_manager: Rc<ConfigManager>,
   pub output_manager: Rc<OutputManager>,
   pub window_manager: Rc<WindowManager>,
 

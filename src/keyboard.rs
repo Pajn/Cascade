@@ -1,9 +1,9 @@
+use crate::actions::*;
+use crate::window_manager::CascadeWindowManager;
+use log::debug;
 use std::process::Command;
 use wlral::input::events::*;
 use xkbcommon::xkb;
-
-use crate::actions::*;
-use crate::window_manager::CascadeWindowManager;
 
 pub fn handle_key_press(wm: &mut CascadeWindowManager, event: &KeyboardEvent) -> bool {
   let validate_mod = |mod_names: &Vec<&'static str>, mod_name| {
@@ -164,6 +164,33 @@ pub fn handle_key_press(wm: &mut CascadeWindowManager, event: &KeyboardEvent) ->
           let window = wm.get_window(active_window);
           window.ask_client_to_close();
         }
+        true
+      }
+      xkb::KEY_space if has_mods(vec![xkb::MOD_NAME_CTRL]) => {
+        let current_layout = &wm.config_manager.config().keyboard;
+        let current_index = wm
+          .config
+          .keyboard_layouts
+          .iter()
+          .enumerate()
+          .find_map(|(index, layout)| {
+            if layout == current_layout {
+              Some(index)
+            } else {
+              None
+            }
+          })
+          // If we didn't find the layout, default to the last so that
+          // we increment to the first
+          .unwrap_or(wm.config.keyboard_layouts.len() - 1);
+
+        let next_index = (current_index + 1) % wm.config.keyboard_layouts.len();
+        let next_layout = wm.config.keyboard_layouts[next_index].clone();
+        debug!("Switching keyboard layout to: {:?}", &next_layout);
+        wm.config_manager.update_config(move |config| {
+          config.keyboard = next_layout;
+        });
+
         true
       }
       _ => false,

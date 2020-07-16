@@ -1,22 +1,38 @@
 mod actions;
 mod animation;
+mod config;
 mod entities;
 mod keyboard;
 mod pointer;
 mod window_manager;
 
+use crate::entities::{Gesture, IdGenerator};
+use crate::window_manager::CascadeWindowManager;
+use config::Config;
+use log::error;
 use std::collections::BTreeMap;
 use wlral::compositor::Compositor;
 use wlral::geometry::Point;
 
-use crate::entities::{Gesture, IdGenerator};
-use crate::window_manager::CascadeWindowManager;
-
 fn main() {
   env_logger::init();
+  let config = match Config::load() {
+    Ok(config) => config,
+    Err(error) => {
+      error!("Eror loading config (falling back to default): {}", error);
+      Config::default()
+    }
+  };
 
   let compositor = Compositor::init();
+  compositor.config_manager().update_config(|c| {
+    c.keyboard = config.keyboard_layouts.first().cloned().unwrap_or_default();
+  });
+
   let mut window_manager = CascadeWindowManager {
+    config,
+
+    config_manager: compositor.config_manager(),
     output_manager: compositor.output_manager(),
     window_manager: compositor.window_manager(),
 
