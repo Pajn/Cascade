@@ -1,5 +1,6 @@
 mod actions;
 mod animation;
+mod background;
 mod config;
 mod entities;
 mod keyboard;
@@ -8,6 +9,7 @@ mod window_manager;
 
 use crate::entities::{Gesture, IdGenerator};
 use crate::window_manager::CascadeWindowManager;
+use background::BackgroundConfig;
 use config::Config;
 use log::error;
 use std::collections::BTreeMap;
@@ -56,6 +58,7 @@ fn main() {
     // animation_state: animation_state.clone(),
   };
   window_manager.init();
+  BackgroundConfig::init(&window_manager.config, compositor.config_manager());
   compositor
     .run(window_manager)
     .expect("Could not start compositor");
