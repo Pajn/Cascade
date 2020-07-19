@@ -28,7 +28,7 @@ impl IdGenerator {
   }
 }
 
-// #[derive(Debug)]
+#[derive(Debug)]
 pub struct Window {
   pub id: Id,
   pub on_workspace: Option<Id>,
@@ -68,12 +68,20 @@ impl Window {
   pub fn top_left(&self) -> Point {
     match *self.animation_status.read().unwrap() {
       AnimationStatus::IsAnimating(to) => to,
-      AnimationStatus::Still => self.pending_position.as_ref().map(Rectangle::top_left).unwrap_or(self.current_position.top_left()),
+      AnimationStatus::Still => self
+        .pending_position
+        .as_ref()
+        .map(Rectangle::top_left)
+        .unwrap_or(self.current_position.top_left()),
     }
   }
 
   pub fn size(&self) -> Size {
-    self.pending_position.as_ref().map(Rectangle::size).unwrap_or(self.current_position.size())
+    self
+      .pending_position
+      .as_ref()
+      .map(Rectangle::size)
+      .unwrap_or(self.current_position.size())
   }
 
   pub fn rendered_pos(&self) -> Rectangle {
@@ -140,8 +148,14 @@ impl Window {
   pub fn set_position(&mut self, position: Rectangle) {
     self.pending_position = Some(Rectangle {
       size: Size {
-        width: cmp::max(cmp::min(position.size.width, self.max_width()), self.min_width()),
-        height: cmp::max(cmp::min(position.size.height, self.max_height()), self.min_height()),
+        width: cmp::max(
+          cmp::min(position.size.width, self.max_width()),
+          self.min_width(),
+        ),
+        height: cmp::max(
+          cmp::min(position.size.height, self.max_height()),
+          self.min_height(),
+        ),
       },
       ..position
     });
@@ -150,16 +164,21 @@ impl Window {
   pub fn commit_position(&mut self, scroll_left: i32) {
     if let Some(pending_position) = self.pending_position.take() {
       let top_left = pending_position.top_left()
-          + Displacement {
-            dx: -scroll_left,
-            dy: 0,
-          };
+        + Displacement {
+          dx: -scroll_left,
+          dy: 0,
+        };
       if pending_position.size() == self.size() {
         println!("move_to {:?}", top_left);
         self.window_info.move_to(top_left);
         self.current_position.top_left = pending_position.top_left();
       } else {
-        println!("set_extents {:?} {:?} != {:?}", top_left, self.size(), self.window_info.extents().size());
+        println!(
+          "set_extents {:?} {:?} != {:?}",
+          top_left,
+          self.size(),
+          self.window_info.extents().size()
+        );
         self.window_info.set_extents(&Rectangle {
           top_left,
           size: pending_position.size(),

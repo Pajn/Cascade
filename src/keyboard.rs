@@ -1,199 +1,429 @@
 use crate::actions::*;
 use crate::window_manager::CascadeWindowManager;
-use log::debug;
-use std::process::Command;
+use log::{debug, error, trace};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::{collections::BTreeMap, process::Command};
 use wlral::input::events::*;
 use xkbcommon::xkb;
 
-pub fn handle_key_press(wm: &mut CascadeWindowManager, event: &KeyboardEvent) -> bool {
-  let validate_mod = |mod_names: &Vec<&'static str>, mod_name| {
-    mod_names.contains(&mod_name)
-      == event
-        .xkb_state()
-        .mod_name_is_active(mod_name, xkb::STATE_MODS_DEPRESSED)
-  };
-  let has_mods = |mod_names: Vec<&'static str>| {
-    validate_mod(&mod_names, xkb::MOD_NAME_SHIFT)
-      && validate_mod(&mod_names, xkb::MOD_NAME_CTRL)
-      && validate_mod(&mod_names, xkb::MOD_NAME_LOGO)
-      && validate_mod(&mod_names, xkb::MOD_NAME_ALT)
-  };
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+#[serde(tag = "action")]
+#[serde(rename_all = "snake_case")]
+pub enum ActionShortcut {
+  NavigateToFirst,
+  NavigateToLast,
+  Navigate { direction: Direction },
+  NavigateWorkspace { direction: VerticalDirection },
+  NavigateMonitor { direction: Direction },
 
-  if event.state() == KeyState::Pressed {
-    match event.get_one_sym() {
-      xkb::KEY_Home if has_mods(vec![xkb::MOD_NAME_SHIFT]) => {
+  MoveWindow { direction: Direction },
+  MoveWindowWorkspace { direction: VerticalDirection },
+  MoveWindowMonitor { direction: Direction },
+
+  ResizeWindow { steps: Vec<f32> },
+  CenterWindow,
+  CloseWindow,
+
+  SwitchKeyboardLayout,
+
+  DebugPrintWindows,
+}
+
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+pub struct CommandShortcut {
+  cmd: String,
+  #[serde(default)]
+  args: Vec<String>,
+}
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum KeyboardShortcut {
+  Action(ActionShortcut),
+  Command(CommandShortcut),
+}
+
+#[derive(Default, Debug, Ord, PartialOrd, Eq, PartialEq, Clone)]
+pub struct Keybinding {
+  alt: bool,
+  ctrl: bool,
+  logo: bool,
+  shift: bool,
+  key: xkb::Keysym,
+}
+
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+pub struct KeyboardShortcutsConfig(BTreeMap<Keybinding, KeyboardShortcut>);
+
+impl Default for KeyboardShortcutsConfig {
+  fn default() -> Self {
+    let mut default = BTreeMap::new();
+    default.insert(
+      Keybinding {
+        key: xkb::KEY_Home,
+        logo: true,
+        ..Keybinding::default()
+      },
+      KeyboardShortcut::Action(ActionShortcut::NavigateToFirst),
+    );
+    default.insert(
+      Keybinding {
+        key: xkb::KEY_End,
+        logo: true,
+        ..Keybinding::default()
+      },
+      KeyboardShortcut::Action(ActionShortcut::NavigateToLast),
+    );
+    default.insert(
+      Keybinding {
+        key: xkb::KEY_Left,
+        logo: true,
+        ..Keybinding::default()
+      },
+      KeyboardShortcut::Action(ActionShortcut::Navigate {
+        direction: Direction::Left,
+      }),
+    );
+    default.insert(
+      Keybinding {
+        key: xkb::KEY_Right,
+        logo: true,
+        ..Keybinding::default()
+      },
+      KeyboardShortcut::Action(ActionShortcut::Navigate {
+        direction: Direction::Right,
+      }),
+    );
+    default.insert(
+      Keybinding {
+        key: xkb::KEY_Up,
+        logo: true,
+        ..Keybinding::default()
+      },
+      KeyboardShortcut::Action(ActionShortcut::NavigateWorkspace {
+        direction: VerticalDirection::Up,
+      }),
+    );
+    default.insert(
+      Keybinding {
+        key: xkb::KEY_Down,
+        logo: true,
+        ..Keybinding::default()
+      },
+      KeyboardShortcut::Action(ActionShortcut::NavigateWorkspace {
+        direction: VerticalDirection::Down,
+      }),
+    );
+    default.insert(
+      Keybinding {
+        key: xkb::KEY_Left,
+        alt: true,
+        logo: true,
+        ..Keybinding::default()
+      },
+      KeyboardShortcut::Action(ActionShortcut::NavigateMonitor {
+        direction: Direction::Left,
+      }),
+    );
+    default.insert(
+      Keybinding {
+        key: xkb::KEY_Right,
+        alt: true,
+        logo: true,
+        ..Keybinding::default()
+      },
+      KeyboardShortcut::Action(ActionShortcut::NavigateMonitor {
+        direction: Direction::Right,
+      }),
+    );
+
+    default.insert(
+      Keybinding {
+        key: xkb::KEY_Left,
+        ctrl: true,
+        logo: true,
+        ..Keybinding::default()
+      },
+      KeyboardShortcut::Action(ActionShortcut::MoveWindow {
+        direction: Direction::Left,
+      }),
+    );
+    default.insert(
+      Keybinding {
+        key: xkb::KEY_Right,
+        ctrl: true,
+        logo: true,
+        ..Keybinding::default()
+      },
+      KeyboardShortcut::Action(ActionShortcut::MoveWindow {
+        direction: Direction::Right,
+      }),
+    );
+    default.insert(
+      Keybinding {
+        key: xkb::KEY_Up,
+        ctrl: true,
+        logo: true,
+        ..Keybinding::default()
+      },
+      KeyboardShortcut::Action(ActionShortcut::MoveWindowWorkspace {
+        direction: VerticalDirection::Up,
+      }),
+    );
+    default.insert(
+      Keybinding {
+        key: xkb::KEY_Down,
+        ctrl: true,
+        logo: true,
+        ..Keybinding::default()
+      },
+      KeyboardShortcut::Action(ActionShortcut::MoveWindowWorkspace {
+        direction: VerticalDirection::Down,
+      }),
+    );
+    default.insert(
+      Keybinding {
+        key: xkb::KEY_Left,
+        alt: true,
+        ctrl: true,
+        logo: true,
+        ..Keybinding::default()
+      },
+      KeyboardShortcut::Action(ActionShortcut::MoveWindowMonitor {
+        direction: Direction::Left,
+      }),
+    );
+    default.insert(
+      Keybinding {
+        key: xkb::KEY_Right,
+        alt: true,
+        ctrl: true,
+        logo: true,
+        ..Keybinding::default()
+      },
+      KeyboardShortcut::Action(ActionShortcut::MoveWindowMonitor {
+        direction: Direction::Right,
+      }),
+    );
+
+    default.insert(
+      Keybinding {
+        key: xkb::KEY_r,
+        logo: true,
+        ..Keybinding::default()
+      },
+      KeyboardShortcut::Action(ActionShortcut::ResizeWindow {
+        steps: vec![0.33, 0.5, 0.66],
+      }),
+    );
+    default.insert(
+      Keybinding {
+        key: xkb::KEY_f,
+        logo: true,
+        ..Keybinding::default()
+      },
+      KeyboardShortcut::Action(ActionShortcut::ResizeWindow { steps: vec![1.0] }),
+    );
+    default.insert(
+      Keybinding {
+        key: xkb::KEY_c,
+        logo: true,
+        ..Keybinding::default()
+      },
+      KeyboardShortcut::Action(ActionShortcut::CenterWindow),
+    );
+    default.insert(
+      Keybinding {
+        key: xkb::KEY_BackSpace,
+        logo: true,
+        ..Keybinding::default()
+      },
+      KeyboardShortcut::Action(ActionShortcut::CloseWindow),
+    );
+    default.insert(
+      Keybinding {
+        key: xkb::KEY_space,
+        logo: true,
+        ..Keybinding::default()
+      },
+      KeyboardShortcut::Action(ActionShortcut::SwitchKeyboardLayout),
+    );
+
+    KeyboardShortcutsConfig(default)
+  }
+}
+
+impl Serialize for Keybinding {
+  fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+  where
+    S: Serializer,
+  {
+    let mut keys = vec![];
+    if self.alt {
+      keys.push("alt");
+    }
+    if self.ctrl {
+      keys.push("ctrl");
+    }
+    if self.shift {
+      keys.push("shift");
+    }
+    if self.logo {
+      keys.push("super");
+    }
+    let key = xkb::keysym_get_name(self.key);
+    keys.push(&key);
+    keys.join("+").serialize(serializer)
+  }
+}
+
+impl<'de> Deserialize<'de> for Keybinding {
+  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+  where
+    D: Deserializer<'de>,
+  {
+    use serde::de::Error;
+    let keys: String = Deserialize::deserialize(deserializer)?;
+    let mut keys = keys.split("+").map(str::trim).collect::<Vec<_>>();
+    let key = keys.pop().ok_or(Error::custom("No key specified"))?;
+    let mods = keys;
+    let mut binding = Keybinding {
+      key: xkb::keysym_from_name(key, xkb::KEYSYM_CASE_INSENSITIVE),
+      ..Keybinding::default()
+    };
+    if binding.key == xkb::KEY_NoSymbol {
+      return Err(Error::custom(format!("Invalid key \"{}\" specified", key)));
+    }
+    for modifier in mods {
+      match &modifier.to_ascii_lowercase() as &str {
+        "alt" => {
+          binding.alt = true;
+        }
+        "ctrl" => {
+          binding.ctrl = true;
+        }
+        "shift" => {
+          binding.shift = true;
+        }
+        "super" | "logo" => {
+          binding.logo = true;
+        }
+        _ => {
+          return Err(Error::custom(format!(
+            "Invalid modifier \"{}\" specified",
+            modifier
+          )));
+        }
+      }
+    }
+    Ok(binding)
+  }
+}
+
+impl ActionShortcut {
+  fn triggered(&self, wm: &mut CascadeWindowManager) {
+    match self {
+      ActionShortcut::NavigateToFirst => {
         navigate_first(wm);
-        true
       }
-      xkb::KEY_End if has_mods(vec![xkb::MOD_NAME_SHIFT]) => {
+      ActionShortcut::NavigateToLast => {
         navigate_last(wm);
-        true
       }
-      xkb::KEY_Left if has_mods(vec![xkb::MOD_NAME_SHIFT]) => {
-        navigate(wm, Direction::Left);
-        true
+      ActionShortcut::Navigate { direction } => {
+        navigate(wm, *direction);
       }
-      xkb::KEY_Right if has_mods(vec![xkb::MOD_NAME_SHIFT]) => {
-        navigate(wm, Direction::Right);
-        true
+      ActionShortcut::NavigateWorkspace { direction } => {
+        switch_workspace(wm, *direction);
       }
-      xkb::KEY_Up if has_mods(vec![xkb::MOD_NAME_SHIFT]) => {
-        switch_workspace(wm, VerticalDirection::Up);
-        true
+      ActionShortcut::NavigateMonitor { direction } => {
+        navigate_monitor(wm, *direction, Activation::LastActive);
       }
-      xkb::KEY_Down if has_mods(vec![xkb::MOD_NAME_SHIFT]) => {
-        switch_workspace(wm, VerticalDirection::Down);
-        true
+      ActionShortcut::MoveWindow { direction } => {
+        move_window(wm, *direction);
       }
-      xkb::KEY_Left if has_mods(vec![xkb::MOD_NAME_SHIFT, xkb::MOD_NAME_CTRL]) => {
-        move_window(wm, Direction::Left);
-        true
+      ActionShortcut::MoveWindowWorkspace { direction } => {
+        move_active_window_workspace(wm, *direction);
       }
-      xkb::KEY_Right if has_mods(vec![xkb::MOD_NAME_SHIFT, xkb::MOD_NAME_CTRL]) => {
-        move_window(wm, Direction::Right);
-        true
+      ActionShortcut::MoveWindowMonitor { direction } => {
+        move_window_monitor(wm, *direction, Activation::LastActive);
       }
-      xkb::KEY_Left if has_mods(vec![xkb::MOD_NAME_SHIFT, xkb::MOD_NAME_ALT]) => {
-        navigate_monitor(wm, Direction::Left, Activation::LastActive);
-        true
+      ActionShortcut::ResizeWindow { steps } => {
+        resize_window(wm, steps);
       }
-      xkb::KEY_Right if has_mods(vec![xkb::MOD_NAME_SHIFT, xkb::MOD_NAME_ALT]) => {
-        navigate_monitor(wm, Direction::Right, Activation::LastActive);
-        true
+      ActionShortcut::CenterWindow => {
+        center_window(wm);
       }
-      xkb::KEY_Left
-        if has_mods(vec![
-          xkb::MOD_NAME_SHIFT,
-          xkb::MOD_NAME_CTRL,
-          xkb::MOD_NAME_ALT,
-        ]) =>
-      {
-        move_window_monitor(wm, Direction::Left, Activation::LastActive);
-        true
-      }
-      xkb::KEY_Right
-        if has_mods(vec![
-          xkb::MOD_NAME_SHIFT,
-          xkb::MOD_NAME_CTRL,
-          xkb::MOD_NAME_ALT,
-        ]) =>
-      {
-        move_window_monitor(wm, Direction::Right, Activation::LastActive);
-        true
-      }
-      xkb::KEY_a if has_mods(vec![xkb::MOD_NAME_SHIFT]) => {
-        Command::new("ulauncher-toggle")
-          .spawn()
-          .expect("failed to execute process");
-        true
-      }
-      xkb::KEY_l if has_mods(vec![xkb::MOD_NAME_SHIFT]) => {
-        Command::new("swaylock")
-          .spawn()
-          .expect("failed to execute process");
-        true
-      }
-      // xkb::KEY_d if has_mods(vec![xkb::MOD_NAME_SHIFT]) => {
-      //   println!("WM: {:?}", wm);
-      //   for window in wm.windows.values() {
-      //     println!("{}: {}", window.name(), window.state());
-      //   }
-      //   true
-      // }
-      xkb::KEY_r if has_mods(vec![xkb::MOD_NAME_CTRL]) => {
-        if let Some(active_window) = wm.active_window {
-          if let Some(monitor) = wm.monitor_by_window(active_window) {
-            let monitor_width = monitor.extents().width();
-            let window_width = wm.get_window(active_window).size().width;
-
-            let window = wm.windows.get_mut(&active_window).unwrap();
-            if window_width < monitor_width / 3 {
-              window.set_size(window.size().with_width(monitor_width / 3));
-            } else if window_width < monitor_width / 2 {
-              window.set_size(window.size().with_width(monitor_width / 2));
-            } else if window_width < ((monitor_width / 3) * 2) {
-              window.set_size(window.size().with_width((monitor_width / 3) * 2));
-            } else {
-              window.set_size(window.size().with_width(monitor_width / 3));
-            }
-            arrange_windows(wm);
-          } else {
-            println!("Active window not on a monitor?");
-          }
-        }
-        true
-      }
-      xkb::KEY_f if has_mods(vec![xkb::MOD_NAME_CTRL]) => {
-        if let Some(active_window) = wm.active_window {
-          if let Some(monitor) = wm.monitor_by_window(active_window) {
-            let monitor_width = monitor.extents().width();
-
-            let window = wm.windows.get_mut(&active_window).unwrap();
-            window.set_size(window.size().with_width(monitor_width));
-            arrange_windows(wm);
-          } else {
-            println!("Active window not on a monitor?");
-          }
-        }
-        true
-      }
-      xkb::KEY_c if has_mods(vec![xkb::MOD_NAME_CTRL]) => {
-        if let Some(active_window) = wm.active_window {
-          if let Some(monitor) = wm.monitor_by_window(active_window) {
-            let monitor_left = monitor.extents().left();
-            let monitor_width = monitor.extents().width();
-            let window = wm.get_window(active_window);
-
-            if let Some(workspace_id) = window.on_workspace {
-              let scroll_left =
-                window.top_left().x - monitor_left - monitor_width / 2 + window.size().width / 2;
-
-              let workspace = wm.get_workspace_mut(workspace_id);
-              workspace.scroll_left = scroll_left;
-
-              arrange_windows(wm);
-            }
-          } else {
-            println!("Active window not on a monitor?");
-          }
-        }
-        true
-      }
-      xkb::KEY_BackSpace if has_mods(vec![xkb::MOD_NAME_CTRL]) => {
+      ActionShortcut::CloseWindow => {
         if let Some(active_window) = wm.active_window {
           let window = wm.get_window(active_window);
           window.ask_client_to_close();
         }
-        true
       }
-      xkb::KEY_space if has_mods(vec![xkb::MOD_NAME_CTRL]) => {
-        let current_layout = &wm.config_manager.config().keyboard;
-        let current_index = wm
-          .config
-          .keyboard_layouts
-          .iter()
-          .enumerate()
-          .find_map(|(index, layout)| {
-            if layout == current_layout {
-              Some(index)
-            } else {
-              None
-            }
-          })
-          // If we didn't find the layout, default to the last so that
-          // we increment to the first
-          .unwrap_or(wm.config.keyboard_layouts.len() - 1);
-
-        let next_index = (current_index + 1) % wm.config.keyboard_layouts.len();
-        let next_layout = wm.config.keyboard_layouts[next_index].clone();
-        debug!("Switching keyboard layout to: {:?}", &next_layout);
-        wm.config_manager.update_config(move |config| {
-          config.keyboard = next_layout;
-        });
-
-        true
+      ActionShortcut::SwitchKeyboardLayout => {
+        switch_keyboard_layout(wm);
       }
-      _ => false,
+      ActionShortcut::DebugPrintWindows => {
+        println!("DEBUG: Windows: {:?}", &wm.windows);
+      }
+    }
+  }
+}
+
+impl CommandShortcut {
+  fn triggered(&self, _wm: &mut CascadeWindowManager) {
+    let result = Command::new(&self.cmd).args(&self.args).spawn();
+
+    if let Err(error) = result {
+      error!("Failed to execute command in shortcut: {}", error);
+    }
+  }
+}
+
+impl KeyboardShortcut {
+  fn triggered(&self, wm: &mut CascadeWindowManager) {
+    match self {
+      KeyboardShortcut::Action(shortcut) => {
+        shortcut.triggered(wm);
+      }
+      KeyboardShortcut::Command(shortcut) => {
+        shortcut.triggered(wm);
+      }
+    }
+  }
+}
+
+pub fn handle_key_press(wm: &mut CascadeWindowManager, event: &KeyboardEvent) -> bool {
+  if event.state() == KeyState::Pressed {
+    let binding = Keybinding {
+      alt: event
+        .xkb_state()
+        .mod_name_is_active(xkb::MOD_NAME_ALT, xkb::STATE_MODS_DEPRESSED),
+      ctrl: event
+        .xkb_state()
+        .mod_name_is_active(xkb::MOD_NAME_CTRL, xkb::STATE_MODS_DEPRESSED),
+      logo: event
+        .xkb_state()
+        .mod_name_is_active(xkb::MOD_NAME_LOGO, xkb::STATE_MODS_DEPRESSED),
+      shift: event
+        .xkb_state()
+        .mod_name_is_active(xkb::MOD_NAME_SHIFT, xkb::STATE_MODS_DEPRESSED),
+      key: xkb::keysym_from_name(
+        &xkb::keysym_get_name(event.get_one_sym()),
+        xkb::KEYSYM_CASE_INSENSITIVE,
+      ),
+    };
+    let shortcut = wm.config.keyboard_shortcuts.0.get(&binding).cloned();
+
+    trace!(
+      "Pressed key {}, binding: {:?}",
+      xkb::keysym_get_name(event.get_one_sym()),
+      &binding
+    );
+    if let Some(shortcut) = shortcut {
+      debug!("Triggering shortcut");
+      shortcut.triggered(wm);
+      true
+    } else {
+      false
     }
   } else {
     false

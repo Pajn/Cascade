@@ -1,10 +1,10 @@
-use log::debug;
+use crate::entities::*;
+use crate::window_manager::CascadeWindowManager;
+use log::{debug, error, trace};
+use serde::{Deserialize, Serialize};
 use std::cmp;
 use std::cmp::Ordering;
 use wlral::geometry::*;
-
-use crate::entities::*;
-use crate::window_manager::CascadeWindowManager;
 
 fn update_cached_positions(wm: &mut CascadeWindowManager, workspace_id: Id) -> () {
   let monitor = wm.monitor_by_workspace(workspace_id);
@@ -127,13 +127,13 @@ pub fn arrange_windows(wm: &mut CascadeWindowManager) -> () {
   arrange_windows_workspace(wm, wm.active_workspace);
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
 pub enum Direction {
   Left,
   Right,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
 pub enum VerticalDirection {
   Up,
   Down,
@@ -290,6 +290,40 @@ pub fn find_index_by_cursor(wm: &CascadeWindowManager, workspace_id: Id, cursor:
   }
 }
 
+pub fn move_active_window_workspace(wm: &mut CascadeWindowManager, direction: VerticalDirection) {
+  if let Some(active_window) = wm.active_window() {
+    if let Some(current_workspace_id) = active_window.on_workspace {
+      let mut hidden_workspaces = wm
+        .workspaces
+        .values()
+        .filter(|workspace| workspace.on_monitor.is_none())
+        .collect::<Vec<_>>();
+      hidden_workspaces.sort_by(|a, b| a.id.cmp(&b.id));
+
+      let next_workspace = match direction {
+        VerticalDirection::Up => hidden_workspaces
+          .iter()
+          .find(|w| w.id > current_workspace_id)
+          .or(hidden_workspaces.first())
+          .unwrap(),
+        VerticalDirection::Down => hidden_workspaces
+          .iter()
+          .rfind(|w| w.id < current_workspace_id)
+          .or(hidden_workspaces.last())
+          .unwrap(),
+      };
+      let next_workspace_id = next_workspace.id;
+      let window_index = next_workspace
+        .active_window()
+        .and_then(|window| next_workspace.get_window_index(window))
+        .unwrap_or(0);
+
+      let active_window_id = active_window.id;
+      move_window_workspace(wm, active_window_id, next_workspace_id, window_index);
+    }
+  }
+}
+
 pub fn move_window_workspace(
   wm: &mut CascadeWindowManager,
   window_id: Id,
@@ -417,6 +451,104 @@ pub fn switch_workspace(wm: &mut CascadeWindowManager, direction: VerticalDirect
     let window = wm.windows.get_mut(&window_id).unwrap();
     window.show();
   }
+}
+
+pub fn resize_window(wm: &mut CascadeWindowManager, steps: &Vec<f32>) {
+  if let Some(active_window) = wm.active_window {
+    if let Some(monitor) = wm.monitor_by_window(active_window) {
+      let monitor_width = monitor.extents().width() as f32;
+      let window_width = wm.get_window(active_window).size().width as f32;
+
+      let window = wm.windows.get_mut(&active_window).unwrap();
+      let mut did_resize = false;
+      for step in steps.iter().cloned() {
+        if window_width < (monitor_width * step).floor() {
+          trace!(
+            "resize_window: {} < {} * {}",
+            window_width,
+            monitor_width,
+            step
+          );
+          window.set_size(
+            window
+              .size()
+              .with_width((monitor_width * step).round() as i32),
+          );
+          did_resize = true;
+          break;
+        } else {
+          trace!(
+            "resize_window: {} >= {} * {}",
+            window_width,
+            monitor_width,
+            step
+          );
+        }
+      }
+      if !did_resize {
+        if let Some(first_step) = steps.first().cloned() {
+          window.set_size(
+            window
+              .size()
+              .with_width((monitor_width * first_step).round() as i32),
+          );
+        } else {
+          error!("resize_window needs at least one step defined");
+        }
+      }
+      arrange_windows(wm);
+    } else {
+      error!("resize_window: Active window is not on a monitor");
+    }
+  }
+}
+
+pub fn center_window(wm: &mut CascadeWindowManager) {
+  if let Some(active_window) = wm.active_window {
+    if let Some(monitor) = wm.monitor_by_window(active_window) {
+      let monitor_left = monitor.extents().left();
+      let monitor_width = monitor.extents().width();
+      let window = wm.get_window(active_window);
+
+      if let Some(workspace_id) = window.on_workspace {
+        let scroll_left =
+          window.top_left().x - monitor_left - monitor_width / 2 + window.size().width / 2;
+
+        let workspace = wm.get_workspace_mut(workspace_id);
+        workspace.scroll_left = scroll_left;
+
+        arrange_windows(wm);
+      }
+    } else {
+      println!("Active window not on a monitor?");
+    }
+  }
+}
+
+pub fn switch_keyboard_layout(wm: &mut CascadeWindowManager) {
+  let current_layout = &wm.config_manager.config().keyboard;
+  let current_index = wm
+    .config
+    .keyboard_layouts
+    .iter()
+    .enumerate()
+    .find_map(|(index, layout)| {
+      if layout == current_layout {
+        Some(index)
+      } else {
+        None
+      }
+    })
+    // If we didn't find the layout, default to the last so that
+    // we increment to the first
+    .unwrap_or(wm.config.keyboard_layouts.len() - 1);
+
+  let next_index = (current_index + 1) % wm.config.keyboard_layouts.len();
+  let next_layout = wm.config.keyboard_layouts[next_index].clone();
+  debug!("Switching keyboard layout to: {:?}", &next_layout);
+  wm.config_manager.update_config(move |config| {
+    config.keyboard = next_layout;
+  });
 }
 
 // pub fn apply_resize_by(wm: &mut CascadeWindowManager, displacement: Displacement) -> () {

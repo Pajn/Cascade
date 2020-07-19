@@ -1,13 +1,14 @@
-use crate::background::BackgroundConfig;
+use crate::{background::BackgroundConfig, keyboard::KeyboardShortcutsConfig};
 use serde::{Deserialize, Serialize};
 use std::{error::Error, fs};
 use wlral::input::keyboard::KeyboardConfig;
 
-#[derive(Default, Debug, Serialize, Deserialize)]
+#[derive(Default, Debug, PartialEq, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
-  pub keyboard_layouts: Vec<KeyboardConfig>,
   pub background: BackgroundConfig,
+  pub keyboard_layouts: Vec<KeyboardConfig>,
+  pub keyboard_shortcuts: KeyboardShortcutsConfig,
 }
 
 impl Config {
