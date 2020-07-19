@@ -6,9 +6,6 @@ use wlral::output::Output;
 use wlral::window::Window as WlralWindow;
 use wlral::window_management_policy::*;
 
-// use crate::animation::*;
-// use crate::input_inhibitor::{focus_exclusive_client, InputInhibitor};
-
 pub type Id = u64;
 
 #[derive(Debug)]
@@ -103,23 +100,19 @@ impl Window {
   }
 
   pub fn max_height(&self) -> i32 {
-    // unsafe { ((*self.window_info).max_height()).value }
-    999999
+    self.window_info.max_height().unwrap_or(i32::MAX as u32) as i32
   }
 
   pub fn min_height(&self) -> i32 {
-    // unsafe { ((*self.window_info).min_height()).value }
-    0
+    self.window_info.min_height().unwrap_or(0) as i32
   }
 
   pub fn max_width(&self) -> i32 {
-    // unsafe { ((*self.window_info).max_width()).value }
-    9999999
+    self.window_info.max_width().unwrap_or(i32::MAX as u32) as i32
   }
 
   pub fn min_width(&self) -> i32 {
-    // unsafe { ((*self.window_info).min_width()).value }
-    0
+    self.window_info.min_width().unwrap_or(0) as i32
   }
 
   // pub fn resize(&mut self, size: Size) {
@@ -209,7 +202,7 @@ impl Window {
   pub fn has_parent(&self) -> bool {
     // unsafe { window_info_has_parent(self.window_info) }
     // self.window_info
-    false
+    self.window_info.parent_wlr_surface().is_some()
   }
 
   pub fn hide(&mut self) {

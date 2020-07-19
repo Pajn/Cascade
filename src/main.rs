@@ -41,8 +41,6 @@ fn main() {
     gesture: Gesture::None,
     restore_size: BTreeMap::new(),
 
-    // tools,
-    // input_inhibitor,
     monitor_id_generator: IdGenerator::new(),
     window_id_generator: IdGenerator::new(),
     workspace_id_generator: IdGenerator::new(),
