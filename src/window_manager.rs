@@ -1,381 +1,213 @@
-use log::debug;
-use std::collections::BTreeMap;
-use std::rc::Rc;
-use wlral::geometry::*;
-use wlral::input::event_filter::EventFilter;
-use wlral::input::events::*;
-use wlral::output::Output;
-use wlral::output_manager::OutputManager;
-use wlral::window::Window as WlralWindow;
-use wlral::window_management_policy::*;
-use wlral::{config::ConfigManager, window_manager::WindowManager};
+use crate::config::Config;
+use crate::{
+  actions::{arrange_windows_all_workspaces, arrange_windows_workspace},
+  entities::{
+    workspace::{Workspace, WorkspacePosition},
+    Gesture, MruList,
+  },
+  keyboard::handle_key_press,
+  pointer,
+};
+use log::warn;
+use std::{
+  cell::{Ref, RefCell},
+  cmp,
+  collections::BTreeMap,
+  rc::Rc,
+};
+use wlral::{
+  compositor::Compositor,
+  config::ConfigManager,
+  input::{
+    event_filter::EventFilter,
+    events::{ButtonEvent, KeyboardEvent, MotionEvent},
+  },
+  output::Output,
+  output_manager::OutputManager,
+  window::Window,
+  window_management_policy::{MoveRequest, ResizeRequest, WindowManagementPolicy},
+  window_manager::WindowManager,
+};
 
-use crate::actions::*;
-use crate::entities::{Gesture, Id, IdGenerator, Monitor, Window, Workspace};
-use crate::keyboard::handle_key_press;
-use crate::{config::Config, pointer};
+pub(crate) struct CascadeWindowManager {
+  pub(crate) config: Config,
+  pub(crate) config_manager: Rc<ConfigManager>,
+  pub(crate) output_manager: Rc<OutputManager>,
+  pub(crate) window_manager: Rc<WindowManager>,
+  mru_windows: RefCell<MruList<Rc<Window>>>,
+  mru_workspaces: RefCell<MruList<Rc<Workspace>>>,
+  pub(crate) output_workspaces: RefCell<BTreeMap<Rc<Output>, Rc<Workspace>>>,
 
-pub struct CascadeWindowManager {
-  pub config: Config,
-
-  pub config_manager: Rc<ConfigManager>,
-  pub output_manager: Rc<OutputManager>,
-  pub window_manager: Rc<WindowManager>,
-
-  pub gesture: Gesture,
-  pub restore_size: BTreeMap<usize, Rectangle>,
-
-  pub monitor_id_generator: IdGenerator,
-  pub window_id_generator: IdGenerator,
-  pub workspace_id_generator: IdGenerator,
-
-  pub monitors: BTreeMap<Id, Monitor>,
-  pub windows: BTreeMap<Id, Window>,
-  pub workspaces: BTreeMap<Id, Workspace>,
-
-  pub old_cursor: Point,
-  pub active_window: Option<Id>,
-  pub active_workspace: Id,
-  pub new_window_workspace: Id,
-  // pub animation_state: Arc<WindowAnimaitonState>,
+  pub(crate) gesture: RefCell<Gesture>,
 }
 
 impl CascadeWindowManager {
-  pub fn init(&mut self) {
-    let workspace_id = self.get_or_create_unused_workspace();
-    self.new_window_workspace = workspace_id;
-    self.active_workspace = workspace_id;
+  pub(crate) fn new(config: Config, compositor: &Compositor) -> CascadeWindowManager {
+    CascadeWindowManager {
+      config,
+      config_manager: compositor.config_manager(),
+      output_manager: compositor.output_manager(),
+      window_manager: compositor.window_manager(),
+      mru_windows: RefCell::new(MruList::new()),
+      mru_workspaces: RefCell::new(MruList::new()),
+      output_workspaces: RefCell::new(BTreeMap::new()),
+
+      gesture: RefCell::new(Gesture::None),
+    }
   }
 
-  pub fn get_window(&self, window_id: Id) -> &Window {
-    self
-      .windows
-      .get(&window_id)
-      // .expect(format!("Window with id {} not found", window_id))
-      .expect("Window with id {} not found")
-  }
-
-  pub fn get_window_mut(&mut self, window_id: Id) -> &mut Window {
-    self
-      .windows
-      .get_mut(&window_id)
-      // .expect(format!("Window with id {} not found", window_id))
-      .expect("Window with id {} not found")
-  }
-
-  pub fn get_workspace(&self, workspace_id: Id) -> &Workspace {
-    self
-      .workspaces
-      .get(&workspace_id)
-      // .expect(format!("Workspace with id {} not found", workspace_id))
-      .expect("Workspace with id {} not found")
-  }
-
-  pub fn get_workspace_mut(&mut self, workspace_id: Id) -> &mut Workspace {
-    self
-      .workspaces
-      .get_mut(&workspace_id)
-      // .expect(format!("Workspace with id {} not found", workspace_id))
-      .expect("Workspace with id {} not found")
-  }
-
-  pub fn monitor_by_workspace(&self, workspace_id: Id) -> Option<&Monitor> {
-    self
-      .get_workspace(workspace_id)
-      .on_monitor
-      .and_then(|monitor_id| self.monitors.get(&monitor_id))
-  }
-
-  pub fn monitor_by_window(&self, window_id: Id) -> Option<&Monitor> {
-    let workspace_id = self.get_window(window_id).on_workspace;
-    workspace_id.and_then(|workspace_id| self.monitor_by_workspace(workspace_id))
-  }
-
-  pub fn window_by_info(&self, window_info: Rc<WlralWindow>) -> Option<&Window> {
-    self.windows.values().find(|w| w.window_info == window_info)
-  }
-
-  pub fn get_window_at(&self, point: &Point) -> Option<&Window> {
-    println!("get_window_at, {:?}", point);
-    self
-      .monitors
-      .values()
-      .find(|m| m.extents().contains(point))
-      .and_then(|m| {
-        println!(
-          "windows, {:?}",
-          self
-            .get_workspace(m.workspace)
-            .mru_windows
-            .iter()
-            .map(|w| self.get_window(*w).buffer_pos())
-            .collect::<Vec<_>>()
-        );
+  pub(crate) fn focus_workspace(&self, workspace: &Rc<Workspace>) {
+    if self.output_by_workspace(workspace).is_none() {
+      let output = self
+        .mru_workspaces()
+        .top()
+        .and_then(|active_workspace| self.output_by_workspace(active_workspace));
+      if let Some(output) = output {
         self
-          .get_workspace(m.workspace)
-          .mru_windows
-          .iter()
-          .map(|w| self.get_window(*w))
-          .find(|w| w.buffer_pos().contains(point))
+          .output_workspaces
+          .borrow_mut()
+          .insert(output, workspace.clone());
+      } else {
+        warn!("Focusing workspace not on any monitor");
+      }
+    }
+    self.mru_workspaces.borrow_mut().promote(workspace);
+    let top_window = workspace.mru_windows().top().cloned();
+    if let Some(window) = top_window {
+      self.window_manager.focus_window(window);
+    } else {
+      self.window_manager.blur();
+    }
+  }
+
+  pub(crate) fn active_window(&self) -> Option<Rc<Window>> {
+    self.mru_windows.borrow().top().cloned()
+  }
+  pub(crate) fn mru_workspaces(&self) -> Ref<MruList<Rc<Workspace>>> {
+    self.mru_workspaces.borrow()
+  }
+  pub(crate) fn workspace_by_window(&self, window: &Window) -> Option<Rc<Workspace>> {
+    self
+      .mru_workspaces()
+      .iter()
+      .find(|w| w.has_window(&window))
+      .cloned()
+  }
+  pub(crate) fn output_by_window(&self, window: &Window) -> Option<Rc<Output>> {
+    self
+      .workspace_by_window(window)
+      .and_then(|workspace| self.output_by_workspace(&workspace))
+  }
+  pub(crate) fn output_by_workspace(&self, workspace: &Workspace) -> Option<Rc<Output>> {
+    self
+      .output_workspaces
+      .borrow()
+      .iter()
+      .find_map(|(output, w)| {
+        if w.as_ref() == workspace {
+          Some(output.clone())
+        } else {
+          None
+        }
       })
-  }
-
-  pub fn active_window(&self) -> Option<&Window> {
-    self.active_window.and_then(|id| self.windows.get(&id))
-  }
-
-  pub fn active_workspace(&self) -> &Workspace {
-    self
-      .workspaces
-      .get(&self.active_workspace)
-      .expect("Active workspace not found")
-  }
-
-  pub fn new_window_workspace(&self) -> &Workspace {
-    self
-      .workspaces
-      .get(&self.new_window_workspace)
-      .expect("New window workspace not found")
-  }
-
-  pub fn get_or_create_unused_workspace(&mut self) -> Id {
-    let unused_workspaces = self
-      .workspaces
-      .values()
-      .filter(|w| w.on_monitor == None)
-      .collect::<Vec<_>>();
-
-    match unused_workspaces.first() {
-      Option::None => {
-        let first_workspace = Workspace::new(&mut self.workspace_id_generator);
-        let first_workspace_id = first_workspace.id;
-        self.workspaces.insert(first_workspace.id, first_workspace);
-        let second_workspace = Workspace::new(&mut self.workspace_id_generator);
-        let second_workspace_id = second_workspace.id;
-        self
-          .workspaces
-          .insert(second_workspace.id, second_workspace);
-
-        debug!(
-          "Created workspaces as there were no unused first={}, extra={}",
-          first_workspace_id, second_workspace_id
-        );
-
-        first_workspace_id
-      }
-      Some(first_workspace) => {
-        let first_workspace_id = first_workspace.id;
-
-        // We want there to always be an additional workspace avalible
-        if unused_workspaces.len() == 1 {
-          let aditional_workspace = Workspace::new(&mut self.workspace_id_generator);
-          let aditional_workspace_id = aditional_workspace.id;
-          self
-            .workspaces
-            .insert(aditional_workspace.id, aditional_workspace);
-
-          debug!(
-            "Created workspace as there were no extras {}",
-            aditional_workspace_id
-          );
-        }
-
-        first_workspace_id
-      }
-    }
-  }
-
-  pub fn delete_window(&mut self, window_id: Id) -> () {
-    // Ignore the error as it's normal that windows are not in any workspace
-    let _ = self.remove_window_from_workspace(window_id);
-    self.windows.remove(&window_id);
-
-    if self.active_window == Some(window_id) {
-      // TODO: WLRAL does not do this!
-      // Mir will focus a new window for us so we can just unset
-      // active_window and wait for the focus event
-      self.active_window = None;
-    }
-  }
-
-  pub fn focus_window(&mut self, window_id: Option<Id>) -> () {
-    if let Some(window_id) = window_id {
-      if let Some(workspace_id) = self.get_window(window_id).on_workspace {
-        let workspace = self.get_workspace_mut(workspace_id);
-
-        workspace.mru_windows.push(window_id);
-
-        if workspace.on_monitor.is_some() {
-          self.active_workspace = workspace_id;
-          self.new_window_workspace = workspace_id;
-        }
-      }
-      self.active_window = Some(window_id);
-      self
-        .window_manager
-        .focus_window(self.get_window(window_id).window_info.clone());
-      arrange_windows(self);
-    }
-  }
-
-  pub fn remove_window_from_workspace(&mut self, window_id: Id) -> Result<(), ()> {
-    let workspace = self.get_workspace(self.get_window(window_id).on_workspace.ok_or(())?);
-    let workspace_id = workspace.id;
-    // if workspace.active_window() == Some(window_id) {
-    //   let active_window = self.get_window(window_id);
-    //   if active_window.is_tiled() {
-    //     let window_index = workspace.get_window_index(window_id).ok_or(())?;
-    //     let window_index = if window_index > 0 {
-    //       window_index - 1
-    //     } else {
-    //       window_index + 1
-    //     };
-    //     let next_active_window = workspace.windows.get(window_index).copied();
-    //     let workspace = self.workspaces.get_mut(&workspace_id).unwrap();
-    //     workspace.active_window = next_active_window;
-    //   } else {
-    //     let next_active_window = workspace.windows.last().copied();
-    //     let workspace = self.workspaces.get_mut(&workspace_id).unwrap();
-    //     workspace.active_window = next_active_window;
-    //   }
-    // }
-    let workspace = self.get_workspace_mut(workspace_id);
-    let raw_index = workspace.get_window_index(window_id).ok_or(())?;
-    workspace.windows.remove(raw_index);
-    workspace.mru_windows.remove(&window_id);
-    Ok(())
   }
 }
 
 impl WindowManagementPolicy for CascadeWindowManager {
-  fn handle_window_ready(&mut self, window_info: Rc<WlralWindow>) {
-    let mut window = Window::new(
-      &mut self.window_id_generator,
-      // wm.animation_state.clone(),
-      window_info,
-    );
-    // window.x = window.x();
-    // window.y = window.y();
-    window.current_position = window.window_info.extents();
-    println!("handle_window_ready name: {:?}", window.name());
+  fn handle_window_ready(&self, window: Rc<Window>) {
+    if window.can_receive_focus() {
+      self.mru_windows.borrow_mut().push(window.clone());
 
-    // let type_ = unsafe { window_info.type_() };
-    // let has_parent = unsafe { window_info_has_parent(window_info) };
-    if window.is_tiled() {
-      window.on_workspace = Some(self.new_window_workspace);
-      // println!(
-      //   "handle_window_ready tiled type_ {}, has_parent {}",
-      //   type_, has_parent
-      // );
-      // } else {
-      //   println!(
-      //     "handle_window_ready not tiled type_ {}, has_parent {}",
-      //     type_, has_parent
-      //   );
-    }
+      let active_workspace = self
+        .mru_workspaces()
+        .top()
+        .cloned()
+        .expect("There should be at least one workspace");
+      active_workspace.add_window(window.clone(), WorkspacePosition::ActiveWindow);
 
-    // println!("WM: {:?}, adding: {:?}", &self, &window);
-    if let Some(workspace_id) = window.on_workspace {
-      println!("workspace_id {}", workspace_id);
-      println!("workspaces {:?}", self.workspaces);
-      let workspace = self.workspaces.get_mut(&workspace_id).unwrap();
-
-      if let Some(index) = self
-        .active_window
-        .and_then(|active_window| workspace.get_window_index(active_window))
-      {
-        workspace.windows.insert(index + 1, window.id);
-      } else {
-        workspace.windows.push(window.id);
-      }
-    }
-
-    let window_id = window.id;
-    self.windows.insert(window.id, window);
-
-    let window = self.get_window(window_id);
-    if !window.has_parent() {
-      self.focus_window(Some(window_id));
-    }
-
-    arrange_windows(self);
-  }
-
-  fn advise_configured_window(&mut self, window_info: Rc<WlralWindow>) {
-    if let Some(window) = self.window_by_info(window_info.clone()) {
-      let window_id = window.id;
-      let new_position = window_info.extents()
-        + Displacement {
-          dx: window
-            .on_workspace
-            .map(|w| self.get_workspace(w).scroll_left)
-            .unwrap_or(0),
-          dy: 0,
-        };
-      self.get_window_mut(window_id).current_position = new_position;
-    } else {
-      println!(
-        "nowindow in windows advise_configured_window, title: {:?}",
-        window_info.title()
-      );
+      self.window_manager.focus_window(window);
     }
   }
-
-  fn advise_delete_window(&mut self, window_info: Rc<WlralWindow>) {
-    if let Some(window) = self.window_by_info(window_info.clone()) {
-      let window_id = window.id;
-      self.delete_window(window_id);
-    } else {
-      println!(
-        "nowindow in windows advise_delete_window, title: {:?}",
-        window_info.title()
-      );
+  fn advise_configured_window(&self, window: Rc<Window>) {
+    let workspace = self.workspace_by_window(&window);
+    if let Some(workspace) = workspace {
+      arrange_windows_workspace(self, workspace);
     }
-
-    // println!("advise_delete_window {:?}", &self);
   }
-
-  fn advise_output_create(&mut self, output: Rc<Output>) {
-    let workspace_id = self.get_or_create_unused_workspace();
-    println!("advise_output_create, workspace={}", workspace_id);
-    let monitor = Monitor::new(&mut self.monitor_id_generator, workspace_id, output);
-    self.get_workspace_mut(workspace_id).on_monitor = Some(monitor.id);
-    self.monitors.insert(monitor.id, monitor);
+  fn advise_focused_window(&self, window: Rc<Window>) {
+    self.mru_windows.borrow_mut().promote(&window);
+    let workspace = self.workspace_by_window(&window);
+    if let Some(workspace) = workspace {
+      workspace.promote_window(&window);
+      self.focus_workspace(&workspace);
+      arrange_windows_workspace(self, workspace.clone());
+    }
   }
+  fn advise_delete_window(&self, window: Rc<Window>) {
+    self.mru_windows.borrow_mut().remove(&window);
 
-  fn advise_output_update(&mut self, output: Rc<Output>) {
-    let monitor = self
-      .monitors
-      .iter_mut()
-      .find(|(_, m)| &m.output == &output)
-      .expect("monitor advise_output_update")
-      .1;
-
-    println!("advise_output_update {:?}", output.extents());
-
-    let workspace_id = monitor.workspace;
-    arrange_windows_workspace(self, workspace_id);
-  }
-
-  fn advise_output_delete(&mut self, output: Rc<Output>) {
-    let monitor = self
-      .monitors
-      .iter_mut()
-      .find(|(_, m)| &m.output == &output)
-      .expect("monitor advise_output_delete")
-      .1;
     let workspace = self
-      .workspaces
-      .get_mut(&monitor.workspace)
-      .expect("workspace advise_output_delete");
-    workspace.on_monitor = None;
-    let monitor_id = monitor.id;
-    self.monitors.remove(&monitor_id);
+      .mru_workspaces()
+      .iter()
+      .find(|w| w.has_window(&window))
+      .cloned();
+    if let Some(workspace) = workspace {
+      workspace.remove_window(&window);
+    }
 
-    arrange_windows(self);
+    let next_window = self
+      .mru_workspaces()
+      .iter()
+      .filter_map(|w| w.mru_windows().top().cloned())
+      .next();
+    if let Some(window) = next_window {
+      self.window_manager.focus_window(window)
+    }
   }
 
-  fn handle_request_move(&mut self, request: MoveRequest) {
+  fn advise_output_create(&self, output: Rc<Output>) {
+    let mut mru_workspaces = self.mru_workspaces.borrow_mut();
+    let expected_extra_workspaces = cmp::max(self.config.extra_workspaces, 1);
+    while mru_workspaces.len() - self.output_workspaces.borrow().len() <= expected_extra_workspaces
+    {
+      mru_workspaces.push_bottom(Rc::new(Workspace::new()));
+    }
+    let first_unused_workspace = mru_workspaces
+      .iter()
+      .find(|w| self.output_by_workspace(w).is_none())
+      .cloned()
+      .expect("There should be at least one unused workspace");
+
+    self
+      .output_workspaces
+      .borrow_mut()
+      .insert(output, first_unused_workspace.clone());
+    arrange_windows_workspace(self, first_unused_workspace);
+  }
+  fn advise_output_update(&self, output: Rc<Output>) {
+    let workspace = self
+      .output_workspaces
+      .borrow()
+      .get(&output)
+      .cloned()
+      .expect("Output should have an assigned workspace");
+    arrange_windows_workspace(self, workspace);
+  }
+  fn advise_output_delete(&self, output: Rc<Output>) {
+    let mru_workspaces = self.mru_workspaces();
+    let mru_outputs = mru_workspaces
+      .iter()
+      .filter_map(|w| self.output_by_workspace(w))
+      .filter(|o| *o != output);
+
+    let output_workspaces = mru_outputs
+      .zip(mru_workspaces.iter().cloned())
+      .collect::<BTreeMap<_, _>>();
+    *self.output_workspaces.borrow_mut() = output_workspaces;
+    arrange_windows_all_workspaces(self);
+  }
+
+  fn handle_request_move(&self, request: MoveRequest) {
     if !self.window_manager.window_has_focus(&request.window) {
       // Deny move requests from unfocused clients
       return;
@@ -388,9 +220,9 @@ impl WindowManagementPolicy for CascadeWindowManager {
       request.window.set_fullscreen(false);
     }
 
-    self.gesture = Gesture::Move(request)
+    *self.gesture.borrow_mut() = Gesture::Move(request)
   }
-  fn handle_request_resize(&mut self, request: ResizeRequest) {
+  fn handle_request_resize(&self, request: ResizeRequest) {
     if !self.window_manager.window_has_focus(&request.window) {
       // Deny resize requests from unfocused clients
       return;
@@ -401,71 +233,18 @@ impl WindowManagementPolicy for CascadeWindowManager {
     }
 
     let original_extents = request.window.extents();
-    self.gesture = Gesture::Resize(request, original_extents)
+    *self.gesture.borrow_mut() = Gesture::Resize(request, original_extents)
   }
-  // fn handle_request_maximize(&mut self, request: MaximizeRequest) {
-  //   let output = self.output_for_window(&request.window);
-
-  //   if let Some(output) = output {
-  //     if request.maximize {
-  //       self.restore_size.insert(
-  //         request.window.wlr_surface() as usize,
-  //         request.window.extents(),
-  //       );
-  //       request.window.set_maximized(true);
-  //       request.window.set_extents(&Rectangle {
-  //         top_left: output.top_left(),
-  //         size: output.size(),
-  //       });
-  //     } else {
-  //       request.window.set_maximized(false);
-  //       if let Some(extents) = self
-  //         .restore_size
-  //         .get(&(request.window.wlr_surface() as usize))
-  //       {
-  //         request.window.set_extents(extents);
-  //       }
-  //     }
-  //   }
-  // }
-  // fn handle_request_fullscreen(&mut self, request: FullscreenRequest) {
-  //   let output = request
-  //     .output
-  //     .clone()
-  //     .or_else(|| self.output_for_window(&request.window));
-
-  //   if let Some(output) = output {
-  //     if request.fullscreen {
-  //       self.restore_size.insert(
-  //         request.window.wlr_surface() as usize,
-  //         request.window.extents(),
-  //       );
-  //       request.window.set_fullscreen(true);
-  //       request.window.set_extents(&Rectangle {
-  //         top_left: output.top_left(),
-  //         size: output.size(),
-  //       });
-  //     } else {
-  //       request.window.set_fullscreen(false);
-  //       if let Some(extents) = self
-  //         .restore_size
-  //         .get(&(request.window.wlr_surface() as usize))
-  //       {
-  //         request.window.set_extents(extents);
-  //       }
-  //     }
-  //   }
-  // }
 }
 
 impl EventFilter for CascadeWindowManager {
-  fn handle_keyboard_event(&mut self, event: &KeyboardEvent) -> bool {
+  fn handle_keyboard_event(&self, event: &KeyboardEvent) -> bool {
     handle_key_press(self, event)
   }
-  fn handle_pointer_motion_event(&mut self, event: &MotionEvent) -> bool {
+  fn handle_pointer_motion_event(&self, event: &MotionEvent) -> bool {
     pointer::handle_motion_event(self, event)
   }
-  fn handle_pointer_button_event(&mut self, event: &ButtonEvent) -> bool {
+  fn handle_pointer_button_event(&self, event: &ButtonEvent) -> bool {
     pointer::handle_button_event(self, event)
   }
 }

@@ -7,7 +7,7 @@ use wlral::config::ConfigManager;
 
 #[derive(Debug, Eq, PartialEq, Copy, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum ImageMode {
+pub(crate) enum ImageMode {
   Stretch,
   Fit,
   Fill,
@@ -35,16 +35,16 @@ impl ToString for ImageMode {
 
 #[derive(Default, Debug, PartialEq, Clone, Serialize, Deserialize)]
 #[serde(default)]
-pub struct BackgroundConfig {
-  pub color: Option<String>,
+pub(crate) struct BackgroundConfig {
+  pub(crate) color: Option<String>,
   #[serde(skip)]
-  pub parsed_color: [f32; 3],
-  pub image: Option<String>,
-  pub image_mode: ImageMode,
+  pub(crate) parsed_color: [f32; 3],
+  pub(crate) image: Option<String>,
+  pub(crate) image_mode: ImageMode,
 }
 
 impl BackgroundConfig {
-  pub fn validate(config: &mut Config) -> Result<(), Box<dyn Error>> {
+  pub(crate) fn validate(config: &mut Config) -> Result<(), Box<dyn Error>> {
     let color_re = Regex::new(r"^\s*#([0-9a-fA-F]{6})\s*$").unwrap();
 
     if let Some(ref image_path) = config.background.image {
@@ -80,8 +80,7 @@ impl BackgroundConfig {
     Ok(())
   }
 
-  pub fn init(config: &Config, config_manager: Rc<ConfigManager>) {
-    println!("background config: {:?}", config.background);
+  pub(crate) fn init(config: &Config, config_manager: Rc<ConfigManager>) {
     config_manager.update_config(|c| c.background_color = config.background.parsed_color);
     if let Some(ref image) = config.background.image {
       let result = Command::new("swaybg")

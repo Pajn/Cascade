@@ -1,5 +1,5 @@
 use crate::actions::*;
-use crate::window_manager::CascadeWindowManager;
+use crate::{entities::workspace::WorkspacePosition, window_manager::CascadeWindowManager};
 use log::{debug, error, trace};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{collections::BTreeMap, process::Command};
@@ -9,7 +9,7 @@ use xkbcommon::xkb;
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 #[serde(tag = "action")]
 #[serde(rename_all = "snake_case")]
-pub enum ActionShortcut {
+pub(crate) enum ActionShortcut {
   NavigateToFirst,
   NavigateToLast,
   Navigate { direction: Direction },
@@ -30,20 +30,20 @@ pub enum ActionShortcut {
 }
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-pub struct CommandShortcut {
+pub(crate) struct CommandShortcut {
   cmd: String,
   #[serde(default)]
   args: Vec<String>,
 }
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum KeyboardShortcut {
+pub(crate) enum KeyboardShortcut {
   Action(ActionShortcut),
   Command(CommandShortcut),
 }
 
 #[derive(Default, Debug, Ord, PartialOrd, Eq, PartialEq, Clone)]
-pub struct Keybinding {
+pub(crate) struct Keybinding {
   alt: bool,
   ctrl: bool,
   logo: bool,
@@ -52,7 +52,7 @@ pub struct Keybinding {
 }
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-pub struct KeyboardShortcutsConfig(BTreeMap<Keybinding, KeyboardShortcut>);
+pub(crate) struct KeyboardShortcutsConfig(BTreeMap<Keybinding, KeyboardShortcut>);
 
 impl Default for KeyboardShortcutsConfig {
   fn default() -> Self {
@@ -320,7 +320,7 @@ impl<'de> Deserialize<'de> for Keybinding {
 }
 
 impl ActionShortcut {
-  fn triggered(&self, wm: &mut CascadeWindowManager) {
+  fn triggered(&self, wm: &CascadeWindowManager) {
     match self {
       ActionShortcut::NavigateToFirst => {
         navigate_first(wm);
@@ -332,19 +332,19 @@ impl ActionShortcut {
         navigate(wm, *direction);
       }
       ActionShortcut::NavigateWorkspace { direction } => {
-        switch_workspace(wm, *direction);
+        navigate_workspace(wm, *direction);
       }
       ActionShortcut::NavigateMonitor { direction } => {
-        navigate_monitor(wm, *direction, Activation::LastActive);
+        navigate_monitor(wm, *direction, WorkspacePosition::ActiveWindow);
       }
       ActionShortcut::MoveWindow { direction } => {
         move_window(wm, *direction);
       }
       ActionShortcut::MoveWindowWorkspace { direction } => {
-        move_active_window_workspace(wm, *direction);
+        move_window_workspace(wm, *direction);
       }
       ActionShortcut::MoveWindowMonitor { direction } => {
-        move_window_monitor(wm, *direction, Activation::LastActive);
+        move_window_monitor(wm, *direction, WorkspacePosition::ActiveWindow);
       }
       ActionShortcut::ResizeWindow { steps } => {
         resize_window(wm, steps);
@@ -353,23 +353,22 @@ impl ActionShortcut {
         center_window(wm);
       }
       ActionShortcut::CloseWindow => {
-        if let Some(active_window) = wm.active_window {
-          let window = wm.get_window(active_window);
-          window.ask_client_to_close();
+        if let Some(active_window) = wm.window_manager.focused_window() {
+          active_window.ask_client_to_close();
         }
       }
       ActionShortcut::SwitchKeyboardLayout => {
         switch_keyboard_layout(wm);
       }
       ActionShortcut::DebugPrintWindows => {
-        println!("DEBUG: Windows: {:?}", &wm.windows);
+        // println!("DEBUG: Windows: {:?}", &wm.mru_windows());
       }
     }
   }
 }
 
 impl CommandShortcut {
-  fn triggered(&self, _wm: &mut CascadeWindowManager) {
+  fn triggered(&self, _wm: &CascadeWindowManager) {
     let result = Command::new(&self.cmd).args(&self.args).spawn();
 
     if let Err(error) = result {
@@ -379,7 +378,7 @@ impl CommandShortcut {
 }
 
 impl KeyboardShortcut {
-  fn triggered(&self, wm: &mut CascadeWindowManager) {
+  fn triggered(&self, wm: &CascadeWindowManager) {
     match self {
       KeyboardShortcut::Action(shortcut) => {
         shortcut.triggered(wm);
@@ -391,7 +390,7 @@ impl KeyboardShortcut {
   }
 }
 
-pub fn handle_key_press(wm: &mut CascadeWindowManager, event: &KeyboardEvent) -> bool {
+pub(crate) fn handle_key_press(wm: &CascadeWindowManager, event: &KeyboardEvent) -> bool {
   if event.state() == KeyState::Pressed {
     let binding = Keybinding {
       alt: event

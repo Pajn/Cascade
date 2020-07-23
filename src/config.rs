@@ -5,14 +5,15 @@ use wlral::input::keyboard::KeyboardConfig;
 
 #[derive(Default, Debug, PartialEq, Clone, Serialize, Deserialize)]
 #[serde(default)]
-pub struct Config {
-  pub background: BackgroundConfig,
-  pub keyboard_layouts: Vec<KeyboardConfig>,
-  pub keyboard_shortcuts: KeyboardShortcutsConfig,
+pub(crate) struct Config {
+  pub(crate) background: BackgroundConfig,
+  pub(crate) keyboard_layouts: Vec<KeyboardConfig>,
+  pub(crate) keyboard_shortcuts: KeyboardShortcutsConfig,
+  pub(crate) extra_workspaces: usize,
 }
 
 impl Config {
-  pub fn load() -> Result<Config, Box<dyn Error>> {
+  pub(crate) fn load() -> Result<Config, Box<dyn Error>> {
     let config_string =
       fs::read_to_string(shellexpand::tilde("~/.config/cascade/config.yaml").to_string())?;
     let mut config: Config = serde_yaml::from_str(&config_string)?;

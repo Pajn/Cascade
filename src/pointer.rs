@@ -1,110 +1,89 @@
-use wlral::geometry::*;
-use wlral::input::events::*;
-use wlral::window::*;
-
 use crate::actions::*;
 use crate::entities::*;
 use crate::window_manager::CascadeWindowManager;
+use wlral::geometry::*;
+use wlral::input::events::*;
+use wlral::window::*;
+use workspace::WorkspacePosition;
 
-pub fn handle_motion_event(wm: &mut CascadeWindowManager, event: &MotionEvent) -> bool {
+pub(crate) fn handle_motion_event(wm: &CascadeWindowManager, event: &MotionEvent) -> bool {
   let new_cursor = event.position().into();
 
-  let over_monitor = wm
-    .monitors
-    .values()
-    .find(|m| m.extents().contains(&new_cursor));
+  let over_output = wm
+    .output_manager
+    .outputs()
+    .iter()
+    .find(|o| o.extents().contains(&new_cursor))
+    .cloned();
 
-  if let Some(monitor) = over_monitor {
-    if monitor.workspace != wm.active_workspace {
-      wm.active_workspace = monitor.workspace;
-      wm.new_window_workspace = monitor.workspace;
-    }
+  if let Some(ref output) = over_output {
+    let workspace = wm
+      .output_workspaces
+      .borrow()
+      .get(output)
+      .cloned()
+      .expect("Output should be assigned a workspace");
+    wm.focus_workspace(&workspace);
   }
 
-  let consume_event = match wm.gesture {
+  match *wm.gesture.borrow() {
     Gesture::Move(ref gesture) => {
-      let window_id = wm
-        .window_by_info(gesture.window.clone())
-        .expect("moved window")
-        .id;
+      let window = &gesture.window;
       if new_cursor.y < 100 {
-        let window = wm.windows.get_mut(&window_id).unwrap();
-        if window.is_dragged {
-          window.is_dragged = false;
+        if let Some(workspace) = wm.workspace_by_window(&gesture.window) {
+          let pre_scroll_left = workspace.scroll_left();
+          workspace.set_scroll_left(pre_scroll_left - event.delta().dx as i32);
+          arrange_windows_workspace_options(wm, workspace.clone(), true);
         }
-        let window = wm.get_window(window_id);
-        if let Some(workspace_id) = window.on_workspace {
-          let workspace = wm.workspaces.get_mut(&workspace_id).unwrap();
-          workspace.scroll_left -= new_cursor.x - wm.old_cursor.x;
-          println!(
-            "update workspace.scroll_left {}: {}",
-            new_cursor.x - wm.old_cursor.x,
-            workspace.scroll_left
-          );
-          arrange_windows_workspace(wm, workspace_id);
-        }
-        wm.focus_window(Some(window_id));
       } else {
-        let window = wm.windows.get_mut(&window_id).unwrap();
-        if !window.is_dragged {
-          window.is_dragged = true;
-        }
-
-        let window = wm.get_window(window_id);
         let window_width = window.size().width();
-        if let Some(workspace_id) = window.on_workspace {
-          if let Some(over_monitor) = over_monitor {
-            if over_monitor.workspace != workspace_id {
-              let to_workspace_id = over_monitor.workspace;
-              let index = find_index_by_cursor(wm, to_workspace_id, &new_cursor);
-              move_window_workspace(wm, window_id, to_workspace_id, index);
+        if let Some(workspace) = wm.workspace_by_window(&gesture.window) {
+          if let Some(ref over_output) = over_output {
+            let output_workspace = wm
+              .output_workspaces
+              .borrow()
+              .get(over_output)
+              .cloned()
+              .expect("Output should be assigned a workspace");
+            if output_workspace != workspace {
+              move_specified_window_to_workspace(
+                wm,
+                gesture.window.clone(),
+                &output_workspace,
+                WorkspacePosition::Coordinate(new_cursor),
+              );
               return true;
             }
           }
 
-          if let Some(left_window_id) = get_tiled_window(wm, window_id, Direction::Left) {
-            let left_window = wm.get_window(left_window_id);
+          if let Some(left_window) = workspace.window_by_direction(&window, Direction::Left) {
             if new_cursor.x
-              < left_window.top_left().x() + left_window.size().width() / 2 + window_width / 2
+              < left_window.extents().left() + left_window.size().width() / 2 + window_width / 2
             {
-              wm.workspaces
-                .get_mut(&workspace_id)
-                .unwrap()
-                .swap_windows(window_id, left_window_id);
-              arrange_windows_workspace(wm, workspace_id);
+              let _ = workspace.move_window(&window, Direction::Left);
+              arrange_windows_workspace(wm, workspace);
               return true;
             }
           }
-          if let Some(right_window_id) = get_tiled_window(wm, window_id, Direction::Right) {
-            let right_window = wm.get_window(right_window_id);
+          if let Some(right_window) = workspace.window_by_direction(&window, Direction::Right) {
             if new_cursor.x
-              > right_window.top_left().x() + right_window.size().width() / 2 - window_width / 2
+              > right_window.extents().left() + right_window.size().width() / 2 - window_width / 2
             {
-              wm.workspaces
-                .get_mut(&workspace_id)
-                .unwrap()
-                .swap_windows(window_id, right_window_id);
-              arrange_windows_workspace(wm, workspace_id);
+              let _ = workspace.move_window(&window, Direction::Right);
+              arrange_windows_workspace(wm, workspace);
               return true;
             }
           }
         }
 
-        window
-          .window_info
-          .move_to((event.position() - gesture.drag_point.as_displacement()).into());
+        window.move_to((event.position() - gesture.drag_point.as_displacement()).into());
       }
 
-      true
+      return true;
     }
     Gesture::Resize(ref gesture, ref original_extents) => {
-      // apply_resize_by(wm, new_cursor - wm.old_cursor);
       let displacement = Displacement::from(event.position() - gesture.cursor_position);
       let mut extents = original_extents.clone();
-      let (window_id, workspace_id) = match wm.window_by_info(gesture.window.clone()) {
-        Some(window) => (window.id, window.on_workspace),
-        None => return false,
-      };
 
       if gesture.edges.contains(WindowEdge::TOP) {
         extents.top_left.y += displacement.dy;
@@ -117,58 +96,43 @@ pub fn handle_motion_event(wm: &mut CascadeWindowManager, event: &MotionEvent) -
         extents.top_left.x += displacement.dx;
         extents.size.width -= displacement.dx;
 
-        if let Some(workspace_id) = workspace_id {
-          let workspace = wm.workspaces.get_mut(&workspace_id).unwrap();
-          workspace.scroll_left -= displacement.dx;
+        if let Some(workspace) = wm.workspace_by_window(&gesture.window) {
+          let current_extents = gesture.window.extents();
+          let delta_x = current_extents.left() - extents.left();
+          if delta_x < 0 {
+            let mut scroll_left = workspace.scroll_left();
+            scroll_left += delta_x;
+            workspace.set_scroll_left(scroll_left);
+          }
         }
       } else if gesture.edges.contains(WindowEdge::RIGHT) {
         extents.size.width += displacement.dx;
       }
 
-      if let Some(workspace_id) = workspace_id {
-        let window = wm.windows.get_mut(&window_id).unwrap();
-        window.set_position(extents);
-        arrange_windows_workspace(wm, workspace_id);
+      gesture.window.set_extents(&extents);
+      if let Some(workspace) = wm.workspace_by_window(&gesture.window) {
+        arrange_windows_workspace(wm, workspace);
       }
 
-      true
+      return true;
     }
-    _ => false,
-  };
+    _ => {}
+  }
 
-  wm.old_cursor = new_cursor;
-  consume_event
+  false
 }
 
-pub fn handle_button_event(wm: &mut CascadeWindowManager, event: &ButtonEvent) -> bool {
-  let consume_event = event.state() == ButtonState::Released
-    && match wm.gesture {
-      Gesture::Move(ref gesture) => {
-        let window_id = wm
-          .window_by_info(gesture.window.clone())
-          .expect("moved window")
-          .id;
-        let window = wm.windows.get_mut(&window_id).unwrap();
-        window.is_dragged = false;
-        wm.gesture = Gesture::None;
-        if let Some(workspace_id) = window.on_workspace {
-          arrange_windows_workspace(wm, workspace_id);
-        }
-        true
+pub(crate) fn handle_button_event(wm: &CascadeWindowManager, event: &ButtonEvent) -> bool {
+  if event.state() == ButtonState::Released {
+    let gesture_window = wm.gesture.borrow().window();
+    if let Some(window) = gesture_window {
+      *wm.gesture.borrow_mut() = Gesture::None;
+      if let Some(workspace) = wm.workspace_by_window(&window) {
+        arrange_windows_workspace(wm, workspace);
       }
-      Gesture::Resize(_, _) => {
-        wm.gesture = Gesture::None;
-        true
-      }
-      _ => false,
-    };
-
-  if !consume_event && event.state() == ButtonState::Pressed {
-    let window_id = wm.get_window_at(&event.position().into()).map(|w| w.id);
-    if let Some(window_id) = window_id {
-      wm.focus_window(Some(window_id));
+      return true;
     }
   }
 
-  consume_event
+  false
 }

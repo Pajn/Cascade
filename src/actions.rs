@@ -1,235 +1,227 @@
 use crate::entities::*;
 use crate::window_manager::CascadeWindowManager;
-use log::{debug, error, trace};
+use log::{debug, error, trace, warn};
 use serde::{Deserialize, Serialize};
 use std::cmp;
-use std::cmp::Ordering;
-use wlral::geometry::*;
+use std::{cmp::Ordering, rc::Rc};
+use wlral::{geometry::*, output::Output, window::Window};
+use workspace::WorkspacePosition;
 
-fn update_cached_positions(wm: &mut CascadeWindowManager, workspace_id: Id) -> () {
-  let monitor = wm.monitor_by_workspace(workspace_id);
-  let positions = wm
-    .get_workspace(workspace_id)
-    .windows
-    .iter()
-    .filter_map(|window_id| {
-      let window = wm.windows.get(window_id).unwrap();
-
-      if window.is_tiled() {
-        Some(window)
-      } else {
-        None
-      }
-    })
-    .scan(
-      monitor.map_or(0, |m| m.extents().left()),
-      |next_x, window| {
+pub(crate) fn arrange_windows_workspace_options(
+  wm: &CascadeWindowManager,
+  workspace: Rc<Workspace>,
+  force_set: bool,
+) {
+  if let Some(output) = wm.output_by_workspace(&workspace) {
+    let positions = workspace
+      .windows()
+      .iter()
+      .cloned()
+      .scan(output.extents().left(), |next_x, window| {
         let x = *next_x;
-        *next_x = x + window.size().width;
-        Some((window.id, x))
-      },
-    )
-    .collect::<Vec<_>>();
+        *next_x = x + window.size().width();
+        Some((window, x))
+      })
+      .collect::<Vec<_>>();
 
-  for (window_id, x) in positions {
-    let monitor = wm.monitor_by_window(window_id);
-    let window = wm.get_window(window_id);
+    let mut scroll_left = workspace.scroll_left();
+    let active_window = wm.active_window();
+    // Enusure that the focused window is visble
+    if let Some(window) = active_window {
+      for (w, window_x) in positions.iter() {
+        if *w == window {
+          let extents_left = output.extents().left();
+          let extents_right = output.extents().right();
+          let window_width = window.size().width();
 
-    let height = match monitor {
-      Some(monitor) => cmp::min(monitor.extents().height(), window.max_height()),
-      None => window.size().height,
-    };
+          let x_window_left = *window_x;
+          let x_window_right = window_x + window_width;
 
-    let y = match monitor {
-      Some(monitor) => monitor.extents().top() + (monitor.extents().height() - height) / 2,
-      None => window.top_left().y,
-    };
+          let x_workspace_left = scroll_left + extents_left;
+          let x_workspace_right = scroll_left + extents_right;
 
-    let window = wm.windows.get_mut(&window_id).unwrap();
-
-    println!("x={}", x);
-
-    window.set_position(Rectangle {
-      top_left: Point { x, y },
-      size: window.size().with_height(height),
-    })
-  }
-}
-
-pub fn ensure_window_visible(wm: &mut CascadeWindowManager, window_id: Id) -> () {
-  if let Some(monitor) = wm.monitor_by_window(window_id) {
-    let extents_left = monitor.extents().left();
-    let extents_right = monitor.extents().right();
-    let window = wm.get_window(window_id);
-    let window_x = window.top_left().x;
-    let window_width = window.size().width();
-    let workspace_id = window.on_workspace.unwrap();
-    let workspace = wm.workspaces.get_mut(&workspace_id).unwrap();
-
-    let x_window_left = window_x;
-    let x_window_right = window_x + window_width;
-
-    let x_workspace_left = workspace.scroll_left + extents_left;
-    let x_workspace_right = workspace.scroll_left + extents_right;
-
-    println!(
-      "window_x={} window_width={} x_workspace_left={} x_workspace_right={}",
-      window_x, window_width, x_workspace_left, x_workspace_right
-    );
-    println!(
-      "extents_left={} extents_right={}",
-      extents_left, extents_right
-    );
-
-    if x_window_left < x_workspace_left {
-      workspace.scroll_left = x_window_left - extents_left;
-      debug!("Scrolling left to {}", workspace.scroll_left);
-    } else if x_window_right > x_workspace_right {
-      workspace.scroll_left = x_window_right - extents_right;
-      debug!("Scrolling right to {}", workspace.scroll_left);
+          if x_window_left < x_workspace_left {
+            scroll_left = x_window_left - extents_left;
+            trace!("Scrolling left to {}", scroll_left);
+          } else if x_window_right > x_workspace_right {
+            scroll_left = x_window_right - extents_right;
+            trace!("Scrolling right to {}", scroll_left);
+          }
+        }
+      }
     }
-  } else {
-    println!(
-      "ensure_window_visible on window \"{}\" not on any monitor",
-      window_id
-    );
-  }
-}
+    workspace.set_scroll_left(scroll_left);
 
-pub fn update_window_positions(wm: &mut CascadeWindowManager, workspace_id: Id) -> () {
-  let workspace = wm.get_workspace(workspace_id);
-  let scroll_left = workspace.scroll_left;
+    let gesture_window = wm.gesture.borrow().window();
 
-  for window_id in workspace.windows.clone() {
-    let window = wm.get_window_mut(window_id);
+    for (window, x) in positions {
+      if !force_set && Some(&window) == gesture_window.as_ref() {
+        continue;
+      }
 
-    if window.is_dragged {
-      continue;
-    }
+      let height = cmp::min(
+        output.extents().height(),
+        window.max_height().unwrap_or(i32::MAX as u32) as i32,
+      );
 
-    window.commit_position(scroll_left);
-  }
-}
+      let y = output.extents().top() + (output.extents().height() - height) / 2;
 
-pub fn arrange_windows_workspace(wm: &mut CascadeWindowManager, workspace_id: Id) -> () {
-  update_cached_positions(wm, workspace_id);
-  let workspace = wm.get_workspace(workspace_id);
-  if let Some(active_window_id) = workspace.active_window() {
-    let active_window = wm.get_window(active_window_id);
-    if active_window.is_tiled() {
-      ensure_window_visible(wm, active_window_id);
+      let extents = Rectangle {
+        top_left: Point { x, y },
+        size: window.size().with_height(height),
+      } + Displacement {
+        dx: -scroll_left,
+        dy: 0,
+      };
+
+      if extents.size() == window.size() {
+        window.move_to(extents.top_left);
+      } else {
+        window.set_extents(&extents);
+      }
     }
   }
-  update_window_positions(wm, workspace_id);
 }
 
-pub fn arrange_windows(wm: &mut CascadeWindowManager) -> () {
-  arrange_windows_workspace(wm, wm.active_workspace);
+pub(crate) fn arrange_windows_workspace(wm: &CascadeWindowManager, workspace: Rc<Workspace>) {
+  arrange_windows_workspace_options(wm, workspace, false)
+}
+
+pub(crate) fn arrange_windows_all_workspaces(wm: &CascadeWindowManager) {
+  for workspace in wm.mru_workspaces().iter().cloned() {
+    arrange_windows_workspace(wm, workspace);
+  }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
-pub enum Direction {
+pub(crate) enum Direction {
   Left,
   Right,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
-pub enum VerticalDirection {
+pub(crate) enum VerticalDirection {
   Up,
   Down,
 }
 
-pub fn navigate_first(wm: &mut CascadeWindowManager) {
-  if let Some(window_id) = wm.active_workspace().windows.first().copied() {
-    wm.focus_window(Some(window_id));
-  }
-}
-
-pub fn navigate_last(wm: &mut CascadeWindowManager) {
-  if let Some(window_id) = wm.active_workspace().windows.last().copied() {
-    wm.focus_window(Some(window_id));
-  }
-}
-
-pub fn get_tiled_window(
-  wm: &CascadeWindowManager,
-  window_id: Id,
-  direction: Direction,
-) -> Option<Id> {
-  let window = wm.get_window(window_id);
-  let workspace = wm.get_workspace(window.on_workspace.unwrap());
-  let index = workspace
-    .get_window_index(window_id)
-    .expect("Active window not found in active workspace") as isize;
-  let index = match direction {
-    Direction::Left => index - 1,
-    Direction::Right => index + 1,
-  };
-
-  if index < 0 {
-    None
-  } else {
-    workspace.windows.get(index as usize).cloned()
-  }
-}
-
-pub fn navigate(wm: &mut CascadeWindowManager, direction: Direction) {
-  if let Some(active_window) = wm.active_window {
-    if wm.get_window(active_window).is_tiled() {
-      if let Some(other_window) = get_tiled_window(wm, active_window, direction) {
-        wm.focus_window(Some(other_window));
-      } else {
-        navigate_monitor(wm, direction, Activation::FromDirection);
-      }
+pub(crate) fn navigate_first(wm: &CascadeWindowManager) {
+  if let Some(active_workspace) = wm.mru_workspaces().top() {
+    if let Some(window) = active_workspace.windows().first() {
+      wm.window_manager.focus_window(window.clone());
     }
+  }
+}
+
+pub(crate) fn navigate_last(wm: &CascadeWindowManager) {
+  if let Some(active_workspace) = wm.mru_workspaces().top() {
+    if let Some(window) = active_workspace.windows().last() {
+      wm.window_manager.focus_window(window.clone());
+    }
+  }
+}
+
+pub(crate) fn navigate(wm: &CascadeWindowManager, direction: Direction) {
+  let next_window = wm.active_window().and_then(|active_window| {
+    wm.workspace_by_window(&active_window)
+      .and_then(|workspace| workspace.window_by_direction(&active_window, direction))
+  });
+
+  if let Some(next_window) = next_window {
+    wm.window_manager.focus_window(next_window.clone());
   } else {
     match direction {
-      Direction::Left => navigate_first(wm),
-      Direction::Right => navigate_last(wm),
-    }
-  }
-}
-
-pub fn move_window(wm: &mut CascadeWindowManager, direction: Direction) {
-  if let Some(active_window) = wm.active_window {
-    if let Some(workspace_id) = wm.get_window(active_window).on_workspace {
-      if let Some(other_window) = get_tiled_window(wm, active_window, direction) {
-        wm.workspaces
-          .get_mut(&workspace_id)
-          .unwrap()
-          .swap_windows(active_window, other_window);
-        arrange_windows(wm);
-      } else {
-        move_window_monitor(wm, direction, Activation::FromDirection);
+      Direction::Left => {
+        trace!("Navigate to left monitor");
+        navigate_monitor(wm, Direction::Left, WorkspacePosition::End);
+      }
+      Direction::Right => {
+        trace!("Navigate to right monitor");
+        navigate_monitor(wm, Direction::Right, WorkspacePosition::Start);
       }
     }
   }
 }
 
-pub fn monitor_x_position(a: &&Monitor, b: &&Monitor) -> Ordering {
-  a.extents().left().cmp(&b.extents().left())
+pub(crate) fn move_window(wm: &CascadeWindowManager, direction: Direction) {
+  if let Some(active_window) = wm.active_window() {
+    if let Some(workspace) = wm.workspace_by_window(&active_window) {
+      let result = workspace.move_window(&active_window, direction);
+
+      if result.is_ok() {
+        arrange_windows_workspace(wm, workspace);
+      } else {
+        match direction {
+          Direction::Left => {
+            trace!("Move window to left monitor");
+            move_window_monitor(wm, Direction::Left, WorkspacePosition::End);
+          }
+          Direction::Right => {
+            trace!("Move window to right monitor");
+            move_window_monitor(wm, Direction::Right, WorkspacePosition::Start);
+          }
+        }
+      }
+    }
+  }
 }
 
-pub enum Activation {
-  LastActive,
-  FromDirection,
-}
+fn get_workspace_by_direction(
+  wm: &CascadeWindowManager,
+  direction: VerticalDirection,
+) -> Option<Rc<Workspace>> {
+  if let Some(active_workspace) = wm.mru_workspaces().top() {
+    let hidden_workspaces = wm
+      .mru_workspaces()
+      .iter()
+      .filter(|workspace| {
+        *workspace == active_workspace || wm.output_by_workspace(workspace).is_none()
+      })
+      .cloned()
+      .collect::<Vec<_>>();
 
-pub fn navigate_monitor(
-  wm: &mut CascadeWindowManager,
-  direction: Direction,
-  activation: Activation,
-) {
-  if let Some(current_monitor) = wm.active_workspace().on_monitor {
-    let mut monitors = wm.monitors.values().collect::<Vec<_>>();
-    monitors.sort_by(monitor_x_position);
-
-    let index = monitors
+    let index = hidden_workspaces
       .iter()
       .enumerate()
-      .find(|(_, m)| m.id == current_monitor)
+      .find(|(_, workspace)| *workspace == active_workspace)
       .map(|(index, _)| index)
-      .expect("current_monitor not found") as isize;
+      .expect("active_workspace not found") as isize;
+
+    let index = match direction {
+      VerticalDirection::Up => index - 1,
+      VerticalDirection::Down => index + 1,
+    };
+
+    if index >= 0 {
+      return hidden_workspaces.get(index as usize).cloned();
+    }
+  }
+  None
+}
+
+fn get_output_by_direction(wm: &CascadeWindowManager, direction: Direction) -> Option<Rc<Output>> {
+  let active_workspace = wm.mru_workspaces().top().cloned();
+  let active_output = active_workspace.and_then(|workspace| wm.output_by_workspace(&workspace));
+
+  if let Some(active_output) = active_output {
+    let mut outputs = wm
+      .output_workspaces
+      .borrow()
+      .keys()
+      .cloned()
+      .collect::<Vec<_>>();
+
+    fn output_x_position(a: &Rc<Output>, b: &Rc<Output>) -> Ordering {
+      a.extents().left().cmp(&b.extents().left())
+    }
+    outputs.sort_by(output_x_position);
+
+    let index = outputs
+      .iter()
+      .enumerate()
+      .find(|(_, output)| **output == active_output)
+      .map(|(index, _)| index)
+      .expect("active_output not found") as isize;
 
     let index = match direction {
       Direction::Left => index - 1,
@@ -237,242 +229,139 @@ pub fn navigate_monitor(
     };
 
     if index >= 0 {
-      if let Some(monitor) = monitors.get(index as usize) {
-        wm.active_workspace = monitor.workspace;
-        wm.new_window_workspace = wm.active_workspace;
-        let window = match (activation, direction) {
-          (Activation::LastActive, _) => wm
-            .get_workspace(monitor.workspace)
-            .active_window()
-            .or_else(|| wm.get_workspace(monitor.workspace).windows.last().cloned()),
-          (Activation::FromDirection, Direction::Left) => {
-            wm.get_workspace(monitor.workspace).windows.last().cloned()
-          }
-          (Activation::FromDirection, Direction::Right) => {
-            wm.get_workspace(monitor.workspace).windows.first().cloned()
-          }
-        };
-        wm.focus_window(window);
-      }
+      return outputs.get(index as usize).cloned();
     }
   } else {
-    // TODO: This should not happen
-    println!("Active workspace was not on any monitor")
+    error!("get_output_by_direction: Active workspace is not on any monitor")
+  }
+  None
+}
+
+pub(crate) fn navigate_workspace(wm: &CascadeWindowManager, direction: VerticalDirection) {
+  let next_workspace = get_workspace_by_direction(wm, direction);
+
+  if let Some(workspace) = next_workspace {
+    trace!("Focusing workspace by direction {:?}", direction);
+    wm.focus_workspace(&workspace);
   }
 }
 
-pub fn find_index_by_cursor(wm: &CascadeWindowManager, workspace_id: Id, cursor: &Point) -> usize {
-  let workspace = wm.get_workspace(workspace_id);
-  let mut max_x = None;
-  for (index, window_id) in workspace.windows.iter().cloned().enumerate() {
-    let window = wm.get_window(window_id);
-    if window.is_tiled() {
-      let pos = window.rendered_pos();
-
-      if pos.left() <= cursor.x && pos.right() >= cursor.x {
-        if cursor.x < pos.right() - pos.width() / 2 {
-          return index;
-        } else {
-          return index + 1;
-        }
-      }
-
-      if max_x == None || Some(pos.right()) > max_x {
-        max_x = Some(pos.top_left().x());
-      }
-    }
-  }
-
-  if Some(cursor.x) > max_x {
-    return workspace.windows.len();
-  } else {
-    return 0;
-  }
-}
-
-pub fn move_active_window_workspace(wm: &mut CascadeWindowManager, direction: VerticalDirection) {
-  if let Some(active_window) = wm.active_window() {
-    if let Some(current_workspace_id) = active_window.on_workspace {
-      let mut hidden_workspaces = wm
-        .workspaces
-        .values()
-        .filter(|workspace| workspace.on_monitor.is_none())
-        .collect::<Vec<_>>();
-      hidden_workspaces.sort_by(|a, b| a.id.cmp(&b.id));
-
-      let next_workspace = match direction {
-        VerticalDirection::Up => hidden_workspaces
-          .iter()
-          .find(|w| w.id > current_workspace_id)
-          .or(hidden_workspaces.first())
-          .unwrap(),
-        VerticalDirection::Down => hidden_workspaces
-          .iter()
-          .rfind(|w| w.id < current_workspace_id)
-          .or(hidden_workspaces.last())
-          .unwrap(),
-      };
-      let next_workspace_id = next_workspace.id;
-      let window_index = next_workspace
-        .active_window()
-        .and_then(|window| next_workspace.get_window_index(window))
-        .unwrap_or(0);
-
-      let active_window_id = active_window.id;
-      move_window_workspace(wm, active_window_id, next_workspace_id, window_index);
-    }
-  }
-}
-
-pub fn move_window_workspace(
-  wm: &mut CascadeWindowManager,
-  window_id: Id,
-  to_workspace_id: Id,
-  index: usize,
-) {
-  let to_workspace = wm.workspaces.get_mut(&to_workspace_id).unwrap();
-
-  to_workspace.windows.insert(index, window_id);
-  to_workspace.mru_windows.push(window_id);
-  wm.active_workspace = to_workspace_id;
-  wm.new_window_workspace = to_workspace_id;
-
-  wm.remove_window_from_workspace(window_id)
-    .expect("Window to move not found in its workspace");
-
-  let window = wm.windows.get_mut(&window_id).unwrap();
-  let from_workspace_id = window.on_workspace;
-  window.on_workspace = Some(to_workspace_id);
-
-  arrange_windows_workspace(wm, to_workspace_id);
-  if let Some(from_workspace_id) = from_workspace_id {
-    arrange_windows_workspace(wm, from_workspace_id);
-  }
-}
-
-pub fn move_window_monitor(
-  wm: &mut CascadeWindowManager,
+pub(crate) fn navigate_monitor(
+  wm: &CascadeWindowManager,
   direction: Direction,
-  activation: Activation,
+  workspace_position: WorkspacePosition,
 ) {
-  if let Some(active_window) = wm.active_window {
-    let window = wm.get_window(active_window);
-    if let Some(from_workspace_id) = window.on_workspace {
-      let from_workspace = wm.get_workspace(from_workspace_id);
-      if let Some(monitor) = from_workspace.on_monitor {
-        let mut monitors = wm.monitors.values().collect::<Vec<_>>();
-        monitors.sort_by(monitor_x_position);
+  let next_output = get_output_by_direction(wm, direction);
 
-        let index = monitors
-          .iter()
-          .enumerate()
-          .find(|(_, m)| m.id == monitor)
-          .map(|(index, _)| index)
-          .expect("current_monitor not found") as isize;
-
-        let index = match direction {
-          Direction::Left => index - 1,
-          Direction::Right => index + 1,
-        };
-
-        if index >= 0 {
-          if let Some(monitor) = monitors.get(index as usize) {
-            let to_workspace_id = monitor.workspace;
-            let to_workspace = wm.get_workspace(to_workspace_id);
-
-            let index = match (activation, direction) {
-              (Activation::LastActive, _) => to_workspace
-                .active_window()
-                .and_then(|w| to_workspace.get_window_index(w).map(|i| i + 1))
-                .unwrap_or(to_workspace.windows.len()),
-              (Activation::FromDirection, Direction::Left) => to_workspace.windows.len(),
-              (Activation::FromDirection, Direction::Right) => 0,
-            };
-
-            move_window_workspace(wm, active_window, to_workspace_id, index);
-          }
-        }
-      } else {
-        // TODO: This should not happen
-        println!("Active window was on workspace that was not on any monitor")
+  if let Some(output) = next_output {
+    let workspace = wm
+      .output_workspaces
+      .borrow()
+      .get(&output)
+      .cloned()
+      .expect("Output should have an assigned workspace");
+    let window = match workspace_position {
+      WorkspacePosition::ActiveWindow => workspace.mru_windows().top().cloned(),
+      WorkspacePosition::End => workspace.windows().last().cloned(),
+      WorkspacePosition::Start => workspace.windows().first().cloned(),
+      WorkspacePosition::Coordinate(_) => {
+        error!("Can not navigate monitor by coordinate");
+        return;
       }
+    };
+
+    trace!(
+      "Focusing monitor \"{}\" by direction {:?}",
+      output.name(),
+      direction
+    );
+    if let Some(window) = window {
+      wm.window_manager.focus_window(window);
+    } else {
+      wm.focus_workspace(&workspace);
     }
   }
 }
 
-pub fn switch_workspace(wm: &mut CascadeWindowManager, direction: VerticalDirection) {
-  let mut hidden_workspaces = wm
-    .workspaces
-    .values()
-    .filter(|workspace| workspace.on_monitor.is_none())
-    .collect::<Vec<_>>();
-  hidden_workspaces.sort_by(|a, b| a.id.cmp(&b.id));
-
-  let current_workspace = wm.active_workspace();
-  let current_workspace_id = current_workspace.id;
-
-  for window_id in current_workspace.windows.clone() {
-    let window = wm.windows.get_mut(&window_id).unwrap();
-    window.hide();
-  }
-
-  let next_workspace = match direction {
-    VerticalDirection::Up => hidden_workspaces
-      .iter()
-      .find(|w| w.id > current_workspace_id)
-      .or(hidden_workspaces.first())
-      .unwrap(),
-    VerticalDirection::Down => hidden_workspaces
-      .iter()
-      .rfind(|w| w.id < current_workspace_id)
-      .or(hidden_workspaces.last())
-      .unwrap(),
-  };
-  let next_workspace_id = next_workspace.id;
-  let next_active_window = next_workspace.active_window();
-
-  let current_workspace = wm.workspaces.get_mut(&current_workspace_id).unwrap();
-  let monitor_id = current_workspace.on_monitor.unwrap();
-  current_workspace.on_monitor = None;
-
-  let next_workspace = wm.workspaces.get_mut(&next_workspace_id).unwrap();
-  next_workspace.on_monitor = Some(monitor_id);
-
-  let monitor = wm.monitors.get_mut(&monitor_id).unwrap();
-  monitor.workspace = next_workspace_id;
-
-  wm.active_workspace = next_workspace_id;
-  wm.new_window_workspace = next_workspace_id;
-  wm.focus_window(next_active_window);
-  arrange_windows_workspace(wm, next_workspace_id);
-
-  let next_workspace = wm.get_workspace(next_workspace_id);
-  for window_id in next_workspace.windows.clone() {
-    let window = wm.windows.get_mut(&window_id).unwrap();
-    window.show();
+pub(crate) fn move_specified_window_to_workspace(
+  wm: &CascadeWindowManager,
+  window: Rc<Window>,
+  to_workspace: &Rc<Workspace>,
+  position: WorkspacePosition,
+) {
+  if let Some(from_workspace) = wm.workspace_by_window(&window) {
+    from_workspace.remove_window(&window);
+    to_workspace.add_window(window.clone(), position);
+    wm.focus_workspace(to_workspace);
+    arrange_windows_all_workspaces(wm);
   }
 }
 
-pub fn resize_window(wm: &mut CascadeWindowManager, steps: &Vec<f32>) {
-  if let Some(active_window) = wm.active_window {
-    if let Some(monitor) = wm.monitor_by_window(active_window) {
-      let monitor_width = monitor.extents().width() as f32;
-      let window_width = wm.get_window(active_window).size().width as f32;
+pub(crate) fn move_active_window_to_workspace(
+  wm: &CascadeWindowManager,
+  to_workspace: &Rc<Workspace>,
+  position: WorkspacePosition,
+) {
+  if let Some(active_window) = wm.active_window() {
+    move_specified_window_to_workspace(wm, active_window, to_workspace, position);
+  }
+}
 
-      let window = wm.windows.get_mut(&active_window).unwrap();
+pub(crate) fn move_window_workspace(wm: &CascadeWindowManager, direction: VerticalDirection) {
+  let next_workspace = get_workspace_by_direction(wm, direction);
+
+  if let Some(to_workspace) = next_workspace {
+    trace!(
+      "Moving active window to workspace by direction {:?}",
+      direction
+    );
+    move_active_window_to_workspace(wm, &to_workspace, WorkspacePosition::ActiveWindow);
+  }
+}
+
+pub(crate) fn move_window_monitor(
+  wm: &CascadeWindowManager,
+  direction: Direction,
+  workspace_position: WorkspacePosition,
+) {
+  let next_output = get_output_by_direction(wm, direction);
+
+  if let Some(output) = next_output {
+    let to_workspace = wm
+      .output_workspaces
+      .borrow()
+      .get(&output)
+      .cloned()
+      .expect("Output should have an assigned workspace");
+
+    trace!(
+      "Moving active window to monitor \"{}\" by direction {:?}",
+      output.name(),
+      direction
+    );
+    move_active_window_to_workspace(wm, &to_workspace, workspace_position)
+  }
+}
+
+pub(crate) fn resize_window(wm: &CascadeWindowManager, steps: &Vec<f32>) {
+  if let Some(active_window) = wm.window_manager.focused_window() {
+    if let Some(output) = wm.output_by_window(&active_window) {
+      let output_width = output.extents().width() as f32;
+      let window_width = active_window.size().width as f32;
+
       let mut did_resize = false;
       for step in steps.iter().cloned() {
-        if window_width < (monitor_width * step).floor() {
+        if window_width < (output_width * step).floor() {
           trace!(
             "resize_window: {} < {} * {}",
             window_width,
-            monitor_width,
+            output_width,
             step
           );
-          window.set_size(
-            window
+          active_window.resize(
+            active_window
               .size()
-              .with_width((monitor_width * step).round() as i32),
+              .with_width((output_width * step).round() as i32),
           );
           did_resize = true;
           break;
@@ -480,52 +369,50 @@ pub fn resize_window(wm: &mut CascadeWindowManager, steps: &Vec<f32>) {
           trace!(
             "resize_window: {} >= {} * {}",
             window_width,
-            monitor_width,
+            output_width,
             step
           );
         }
       }
       if !did_resize {
         if let Some(first_step) = steps.first().cloned() {
-          window.set_size(
-            window
+          active_window.resize(
+            active_window
               .size()
-              .with_width((monitor_width * first_step).round() as i32),
+              .with_width((output_width * first_step).round() as i32),
           );
         } else {
           error!("resize_window needs at least one step defined");
         }
       }
-      arrange_windows(wm);
+      arrange_windows_all_workspaces(wm);
     } else {
       error!("resize_window: Active window is not on a monitor");
     }
   }
 }
 
-pub fn center_window(wm: &mut CascadeWindowManager) {
-  if let Some(active_window) = wm.active_window {
-    if let Some(monitor) = wm.monitor_by_window(active_window) {
-      let monitor_left = monitor.extents().left();
-      let monitor_width = monitor.extents().width();
-      let window = wm.get_window(active_window);
+pub(crate) fn center_window(wm: &CascadeWindowManager) {
+  if let Some(window) = wm.active_window() {
+    if let Some(workspace) = wm.workspace_by_window(&window) {
+      if let Some(output) = wm.output_by_workspace(&workspace) {
+        let output_left = output.extents().left();
+        let output_width = output.extents().width();
 
-      if let Some(workspace_id) = window.on_workspace {
         let scroll_left =
-          window.top_left().x - monitor_left - monitor_width / 2 + window.size().width / 2;
+          window.extents().left() - output_left - output_width / 2 + window.size().width / 2;
 
-        let workspace = wm.get_workspace_mut(workspace_id);
-        workspace.scroll_left = scroll_left;
+        workspace.set_scroll_left(scroll_left);
 
-        arrange_windows(wm);
+        arrange_windows_workspace(wm, workspace);
+      } else {
+        warn!("center_window: Active window not on a output?");
       }
-    } else {
-      println!("Active window not on a monitor?");
     }
   }
 }
 
-pub fn switch_keyboard_layout(wm: &mut CascadeWindowManager) {
+pub(crate) fn switch_keyboard_layout(wm: &CascadeWindowManager) {
   let current_layout = &wm.config_manager.config().keyboard;
   let current_index = wm
     .config
@@ -550,62 +437,3 @@ pub fn switch_keyboard_layout(wm: &mut CascadeWindowManager) {
     config.keyboard = next_layout;
   });
 }
-
-// pub fn apply_resize_by(wm: &mut CascadeWindowManager, displacement: Displacement) -> () {
-//   if let Gesture::Resize(ref gesture, ref rect) = wm.gesture {
-//     let old_pos = rect.top_left;
-//     let old_size = rect.size;
-//     let mut new_pos = old_pos.clone();
-//     let mut new_size = old_size.clone();
-//     let window_id = match wm.window_by_info(gesture.window.clone()) {
-//       Some(window) => window.id,
-//       None => return,
-//     };
-
-//     if gesture.edges.contains(WindowEdge::RIGHT) {
-//       new_size.width = old_size.width + displacement.dx;
-//     }
-
-//     if gesture.edges.contains(WindowEdge::LEFT) {
-//       let requested_width = old_size.width - displacement.dx;
-//       let window = wm.get_window(window_id);
-
-//       new_size.width = cmp::max(
-//         cmp::min(requested_width, window.max_width()),
-//         window.min_width(),
-//       );
-//       new_pos.x = old_pos.x + displacement.dx + (requested_width - new_size.width);
-
-//       if let Some(workspace_id) = window.on_workspace {
-//         let workspace = wm.workspaces.get_mut(&workspace_id).unwrap();
-//         workspace.scroll_left -= displacement.dx;
-//       }
-//     }
-
-//     if gesture.edges.contains(WindowEdge::TOP) {
-//       new_size.height = old_size.height - displacement.dy;
-//       new_pos.y = old_pos.y + displacement.dy;
-//     }
-
-//     if gesture.edges.contains(WindowEdge::BOTTOM) {
-//       new_size.height = old_size.height + displacement.dy;
-//     }
-
-//     if let Some(workspace_id) = wm.get_window(window_id).on_workspace {
-//       if new_pos != old_pos || new_size != old_size {
-//         if new_size != old_size {
-//           let window = wm.windows.get_mut(&window_id).unwrap();
-//           window.resize(new_size);
-//         }
-//         arrange_windows_workspace(wm, workspace_id);
-//       }
-//     }
-//     if wm.active_window != Some(window_id) {
-//       wm.focus_window(Some(window_id));
-//     }
-//     if let Gesture::Resize(_, ref mut rect) = wm.gesture {
-//       rect.top_left = new_pos;
-//       rect.size = new_size;
-//     }
-//   }
-// }
