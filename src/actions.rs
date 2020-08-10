@@ -398,9 +398,11 @@ pub(crate) fn center_window(wm: &CascadeWindowManager) {
       if let Some(output) = wm.output_by_workspace(&workspace) {
         let output_left = output.extents().left();
         let output_width = output.extents().width();
+        let current_scroll_left = workspace.scroll_left();
 
         let scroll_left =
-          window.extents().left() - output_left - output_width / 2 + window.size().width / 2;
+          window.extents().left() + current_scroll_left - output_left - output_width / 2
+            + window.size().width / 2;
 
         workspace.set_scroll_left(scroll_left);
 
