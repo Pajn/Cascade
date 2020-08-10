@@ -365,52 +365,56 @@ pub(crate) fn move_window_monitor(
   }
 }
 
-pub(crate) fn resize_window(wm: &CascadeWindowManager, steps: &Vec<f32>) {
-  if let Some(active_window) = wm.window_manager.focused_window() {
-    if let Some(output) = wm.output_by_window(&active_window) {
-      let output_width = output.extents().width() as f32;
-      let window_width = active_window.size().width as f32;
+pub(crate) fn resize_window(wm: &CascadeWindowManager, window: Rc<Window>, steps: &Vec<f32>) {
+  if let Some(output) = wm.output_by_window(&window) {
+    let output_width = output.extents().width() as f32;
+    let window_width = window.size().width as f32;
 
-      let mut did_resize = false;
-      for step in steps.iter().cloned() {
-        if window_width < (output_width * step).floor() {
-          trace!(
-            "resize_window: {} < {} * {}",
-            window_width,
-            output_width,
-            step
-          );
-          active_window.resize(
-            active_window
-              .size()
-              .with_width((output_width * step).round() as i32),
-          );
-          did_resize = true;
-          break;
-        } else {
-          trace!(
-            "resize_window: {} >= {} * {}",
-            window_width,
-            output_width,
-            step
-          );
-        }
+    let mut did_resize = false;
+    for step in steps.iter().cloned() {
+      if window_width < (output_width * step).floor() {
+        trace!(
+          "resize_window: {} < {} * {}",
+          window_width,
+          output_width,
+          step
+        );
+        window.resize(
+          window
+            .size()
+            .with_width((output_width * step).round() as i32),
+        );
+        did_resize = true;
+        break;
+      } else {
+        trace!(
+          "resize_window: {} >= {} * {}",
+          window_width,
+          output_width,
+          step
+        );
       }
-      if !did_resize {
-        if let Some(first_step) = steps.first().cloned() {
-          active_window.resize(
-            active_window
-              .size()
-              .with_width((output_width * first_step).round() as i32),
-          );
-        } else {
-          error!("resize_window needs at least one step defined");
-        }
-      }
-      arrange_windows_all_workspaces(wm);
-    } else {
-      error!("resize_window: Active window is not on a monitor");
     }
+    if !did_resize {
+      if let Some(first_step) = steps.first().cloned() {
+        window.resize(
+          window
+            .size()
+            .with_width((output_width * first_step).round() as i32),
+        );
+      } else {
+        error!("resize_window needs at least one step defined");
+      }
+    }
+    arrange_windows_all_workspaces(wm);
+  } else {
+    error!("resize_window: Window is not on a monitor");
+  }
+}
+
+pub(crate) fn resize_active_window(wm: &CascadeWindowManager, steps: &Vec<f32>) {
+  if let Some(active_window) = wm.window_manager.focused_window() {
+    resize_window(wm, active_window, steps);
   }
 }
 

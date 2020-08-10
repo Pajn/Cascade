@@ -1,6 +1,6 @@
 use crate::config::Config;
 use crate::{
-  actions::{arrange_windows_all_workspaces, arrange_windows_workspace},
+  actions::{arrange_windows_all_workspaces, arrange_windows_workspace, resize_window},
   animation::AnimationManager,
   entities::{
     workspace::{Workspace, WorkspacePosition},
@@ -26,7 +26,7 @@ use wlral::{
   output::Output,
   output_manager::OutputManager,
   window::Window,
-  window_management_policy::{MoveRequest, ResizeRequest, WindowManagementPolicy},
+  window_management_policy::{MaximizeRequest, MoveRequest, ResizeRequest, WindowManagementPolicy},
   window_manager::WindowManager,
 };
 
@@ -238,6 +238,14 @@ impl WindowManagementPolicy for CascadeWindowManager {
 
     let original_extents = request.window.extents();
     *self.gesture.borrow_mut() = Gesture::Resize(request, original_extents)
+  }
+  fn handle_request_maximize(&self, request: MaximizeRequest) {
+    if !self.window_manager.window_has_focus(&request.window) {
+      // Deny resize requests from unfocused clients
+      return;
+    }
+
+    resize_window(self, request.window, &vec![1.0]);
   }
 }
 

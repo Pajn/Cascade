@@ -347,7 +347,7 @@ impl ActionShortcut {
         move_window_monitor(wm, *direction, WorkspacePosition::ActiveWindow);
       }
       ActionShortcut::ResizeWindow { steps } => {
-        resize_window(wm, steps);
+        resize_active_window(wm, steps);
       }
       ActionShortcut::CenterWindow => {
         center_window(wm);
