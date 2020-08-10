@@ -1,4 +1,5 @@
 pub(crate) mod mru_list;
+pub(crate) mod window;
 pub(crate) mod workspace;
 
 pub(crate) use mru_list::MruList;

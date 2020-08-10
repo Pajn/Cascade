@@ -1,115 +1,182 @@
-use std::any::Any;
-use std::sync::{Arc, RwLock};
-use std::time::Duration;
-use wlral::geometry::*;
+use std::{
+  any::Any,
+  cell::RefCell,
+  collections::HashMap,
+  hash::Hash,
+  ptr,
+  rc::Rc,
+  time::{Duration, SystemTime},
+};
+use wlral::{listener, output_manager::OutputManager};
 
-pub trait AnimatableValue: Copy {
-  fn intermediate_value(step: f64, from: &Self, to: &Self) -> Self;
+pub(crate) enum AnimationConflict {
+  NoConflict,
+  Replace,
+  Ignore,
 }
 
-impl AnimatableValue for i32 {
-  fn intermediate_value(step: f64, from: &Self, to: &Self) -> Self {
-    ((to - from) as f64 * step + (*from as f64)) as Self
-  }
-}
-
-impl AnimatableValue for Point {
-  fn intermediate_value(step: f64, from: &Self, to: &Self) -> Self {
-    Point {
-      x: i32::intermediate_value(step, &from.x, &to.x),
-      y: i32::intermediate_value(step, &from.y, &to.y),
-    }
-  }
-}
-
-pub trait AnimationTarget<T: AnimatableValue> {
-  fn get_value(&self) -> T;
-  fn set_value(&mut self, value: T) -> ();
-  fn is_same(&self, _other: &Self) -> bool
+pub(crate) trait AnimationDriver {
+  fn step(&self, percent: f64);
+  fn started(&self) {}
+  fn aborted(&self) {}
+  fn completed(&self) {}
+  fn is_conflict(&self, _other: &Self) -> AnimationConflict
   where
     Self: Sized,
   {
-    false
+    AnimationConflict::NoConflict
+  }
+}
+
+impl AnimationDriver for Box<dyn Fn(f64)> {
+  fn step(&self, percent: f64) {
+    self(percent)
+  }
+}
+
+#[derive(Eq, PartialEq, Copy, Clone)]
+enum AnimationState {
+  Waiting,
+  Running,
+  Completed,
+  Error,
+}
+
+pub(crate) struct Animation<T: ?Sized + AnimationDriver> {
+  pub(crate) driver: Box<T>,
+  pub(crate) delay: Duration,
+  pub(crate) duration: Duration,
+}
+
+impl<T: AnimationDriver> Animation<T> {
+  pub(crate) fn immediate(duration: Duration, driver: T) -> Animation<T> {
+    Animation::delayed(duration, Duration::from_micros(0), driver)
   }
 
-  fn animation_ended(&self) {}
-
-  fn animate_to(self, duration: Duration, to: T) -> Animation<T, Self>
-  where
-    Self: 'static + Sized,
-  {
+  pub(crate) fn delayed(duration: Duration, delay: Duration, driver: T) -> Animation<T> {
     Animation {
+      driver: Box::new(driver),
+      delay,
       duration,
-      step: 0.0,
-      from: self.get_value(),
-      to,
-      target: Box::new(self),
     }
   }
 }
 
-#[derive(Debug)]
-pub struct Animation<T: AnimatableValue + Sized, A: AnimationTarget<T>> {
-  duration: Duration,
-  step: f64,
-  from: T,
-  to: T,
-  target: Box<A>,
-}
+impl<T: ?Sized + AnimationDriver> Animation<T> {
+  fn frame(
+    &self,
+    now: SystemTime,
+    start_time: SystemTime,
+    last_state: AnimationState,
+  ) -> AnimationState {
+    let elapsed = match now.duration_since(start_time) {
+      Ok(duration) => duration,
+      Err(_) => {
+        self.driver.aborted();
+        return AnimationState::Error;
+      }
+    };
+    if elapsed <= self.delay {
+      return AnimationState::Waiting;
+    }
+    if last_state == AnimationState::Waiting {
+      self.driver.started();
+    }
 
-impl<T: AnimatableValue, A: AnimationTarget<T>> Animation<T, A> {
-  fn step(&mut self, elapsed_time: Duration) {
-    let elapsed_step = elapsed_time.as_millis() as f64 / self.duration.as_millis() as f64;
-    self.step = (self.step + elapsed_step).min(1.0);
-    let value = T::intermediate_value(self.step, &self.from, &self.to);
-    self.target.set_value(value);
+    let percent = (elapsed - self.delay).as_micros() as f64 / (self.duration).as_micros() as f64;
+
+    if percent >= 1.0 {
+      self.driver.step(1.0);
+      self.driver.completed();
+      return AnimationState::Completed;
+    }
+
+    self.driver.step(percent);
+    AnimationState::Running
   }
 }
 
-#[derive(Debug)]
-pub struct AnimaitonState<T: AnimatableValue, A: AnimationTarget<T>> {
-  running_animations: Arc<RwLock<Vec<Box<Animation<T, A>>>>>,
+impl<T: ?Sized + AnimationDriver> PartialEq for Animation<T> {
+  fn eq(&self, other: &Self) -> bool {
+    ptr::eq(self.driver.as_ref(), other.driver.as_ref())
+  }
+}
+impl<T: ?Sized + AnimationDriver> Eq for Animation<T> {}
+impl<T: ?Sized + AnimationDriver> Hash for Animation<T> {
+  fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    ptr::hash(self.driver.as_ref(), state);
+  }
 }
 
-impl<T: AnimatableValue, A: 'static + AnimationTarget<T>> AnimaitonState<T, A> {
-  pub fn new() -> Self {
-    AnimaitonState {
-      running_animations: Arc::new(RwLock::new(vec![])),
-    }
+pub(crate) struct AnimationManager {
+  running_animations:
+    RefCell<HashMap<Animation<dyn AnimationDriver>, Option<(SystemTime, AnimationState)>>>,
+}
+
+impl AnimationManager {
+  pub(crate) fn init(output_manager: Rc<OutputManager>) -> Rc<AnimationManager> {
+    let animation_manager = Rc::new(AnimationManager {
+      running_animations: RefCell::new(HashMap::new()),
+    });
+    output_manager
+      .on_new_output()
+      .subscribe(listener!(animation_manager => move |output| {
+        output.on_frame().subscribe(listener!(animation_manager => move || {
+          animation_manager.frame();
+        }));
+      }));
+    animation_manager
   }
 
-  pub fn step(&self, elapsed_time: Duration) {
-    for animation in self.running_animations.write().unwrap().iter_mut() {
-      animation.step(elapsed_time);
-    }
-    self
-      .running_animations
-      .write()
-      .unwrap()
-      .retain(|animation| {
-        let retain = animation.step < 1.0;
-
-        if !retain {
-          animation.target.animation_ended();
+  pub(crate) fn start<T: 'static + AnimationDriver>(&self, animation: Animation<T>) {
+    let mut ignore = false;
+    self.running_animations.borrow_mut().retain(|old, _| {
+      if let Some(old_driver) = Any::downcast_ref::<T>(&old.driver) {
+        match animation.driver.is_conflict(old_driver) {
+          AnimationConflict::NoConflict => true,
+          AnimationConflict::Replace => {
+            old_driver.aborted();
+            false
+          }
+          AnimationConflict::Ignore => {
+            ignore = true;
+            true
+          }
         }
-
-        retain
-      });
-  }
-
-  pub fn start_animation(&self, animation: Animation<T, A>) {
-    // TODO: Maybe set elapsed time when having old animation
-    self.running_animations.write().unwrap().retain(|old| {
-      if let Some(old_target) = Any::downcast_ref::<A>(&old.target) {
-        !animation.target.is_same(old_target)
       } else {
         true
       }
     });
+
+    if !ignore {
+      self.running_animations.borrow_mut().insert(
+        Animation {
+          driver: animation.driver as Box<dyn AnimationDriver>,
+          delay: animation.delay,
+          duration: animation.duration,
+        },
+        None,
+      );
+    }
+  }
+
+  fn frame(&self) {
+    let now = SystemTime::now();
     self
       .running_animations
-      .write()
-      .unwrap()
-      .push(Box::new(animation));
+      .borrow_mut()
+      .retain(|animation, animation_state| {
+        let (start_time, last_state) =
+          animation_state.get_or_insert((now, AnimationState::Waiting));
+        let start_time = *start_time;
+        let state = animation.frame(now, start_time, *last_state);
+        match state {
+          AnimationState::Completed | AnimationState::Error => false,
+          _ => {
+            animation_state.replace((start_time, state));
+            true
+          }
+        }
+      });
   }
 }

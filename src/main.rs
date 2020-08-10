@@ -1,4 +1,5 @@
 mod actions;
+mod animation;
 mod background;
 mod config;
 mod entities;
@@ -27,7 +28,7 @@ fn main() {
     c.keyboard = config.keyboard_layouts.first().cloned().unwrap_or_default();
   });
 
-  let window_manager = CascadeWindowManager::new(config, &compositor);
+  let window_manager = CascadeWindowManager::init(config, &compositor);
   BackgroundConfig::init(&window_manager.config, compositor.config_manager());
   compositor
     .run(window_manager)

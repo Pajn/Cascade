@@ -1,6 +1,7 @@
 use crate::config::Config;
 use crate::{
   actions::{arrange_windows_all_workspaces, arrange_windows_workspace},
+  animation::AnimationManager,
   entities::{
     workspace::{Workspace, WorkspacePosition},
     Gesture, MruList,
@@ -34,6 +35,7 @@ pub(crate) struct CascadeWindowManager {
   pub(crate) config_manager: Rc<ConfigManager>,
   pub(crate) output_manager: Rc<OutputManager>,
   pub(crate) window_manager: Rc<WindowManager>,
+  pub(crate) animation_manager: Rc<AnimationManager>,
   mru_windows: RefCell<MruList<Rc<Window>>>,
   mru_workspaces: RefCell<MruList<Rc<Workspace>>>,
   pub(crate) output_workspaces: RefCell<BTreeMap<Rc<Output>, Rc<Workspace>>>,
@@ -42,12 +44,14 @@ pub(crate) struct CascadeWindowManager {
 }
 
 impl CascadeWindowManager {
-  pub(crate) fn new(config: Config, compositor: &Compositor) -> CascadeWindowManager {
+  pub(crate) fn init(config: Config, compositor: &Compositor) -> CascadeWindowManager {
+    let animation_manager = AnimationManager::init(compositor.output_manager());
     CascadeWindowManager {
       config,
       config_manager: compositor.config_manager(),
       output_manager: compositor.output_manager(),
       window_manager: compositor.window_manager(),
+      animation_manager,
       mru_windows: RefCell::new(MruList::new()),
       mru_workspaces: RefCell::new(MruList::new()),
       output_workspaces: RefCell::new(BTreeMap::new()),

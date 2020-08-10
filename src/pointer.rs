@@ -33,7 +33,14 @@ pub(crate) fn handle_motion_event(wm: &CascadeWindowManager, event: &MotionEvent
         if let Some(workspace) = wm.workspace_by_window(&gesture.window) {
           let pre_scroll_left = workspace.scroll_left();
           workspace.set_scroll_left(pre_scroll_left - event.delta().dx as i32);
-          arrange_windows_workspace_options(wm, workspace.clone(), true);
+          arrange_windows_workspace_options(
+            wm,
+            workspace.clone(),
+            ArrangeWindowOptions {
+              force_set: true,
+              animate: false,
+            },
+          );
         }
       } else {
         let window_width = window.size().width();
@@ -62,16 +69,15 @@ pub(crate) fn handle_motion_event(wm: &CascadeWindowManager, event: &MotionEvent
             {
               let _ = workspace.move_window(&window, Direction::Left);
               arrange_windows_workspace(wm, workspace);
-              return true;
             }
-          }
-          if let Some(right_window) = workspace.window_by_direction(&window, Direction::Right) {
+          } else if let Some(right_window) =
+            workspace.window_by_direction(&window, Direction::Right)
+          {
             if new_cursor.x
               > right_window.extents().left() + right_window.size().width() / 2 - window_width / 2
             {
               let _ = workspace.move_window(&window, Direction::Right);
               arrange_windows_workspace(wm, workspace);
-              return true;
             }
           }
         }

@@ -4,13 +4,28 @@ use log::{debug, error, trace, warn};
 use serde::{Deserialize, Serialize};
 use std::cmp;
 use std::{cmp::Ordering, rc::Rc};
+use window::WindowAnimations;
 use wlral::{geometry::*, output::Output, window::Window};
 use workspace::WorkspacePosition;
+
+pub(crate) struct ArrangeWindowOptions {
+  pub(crate) force_set: bool,
+  pub(crate) animate: bool,
+}
+
+impl Default for ArrangeWindowOptions {
+  fn default() -> Self {
+    ArrangeWindowOptions {
+      force_set: false,
+      animate: true,
+    }
+  }
+}
 
 pub(crate) fn arrange_windows_workspace_options(
   wm: &CascadeWindowManager,
   workspace: Rc<Workspace>,
-  force_set: bool,
+  options: ArrangeWindowOptions,
 ) {
   if let Some(output) = wm.output_by_workspace(&workspace) {
     let positions = workspace
@@ -55,7 +70,8 @@ pub(crate) fn arrange_windows_workspace_options(
     let gesture_window = wm.gesture.borrow().window();
 
     for (window, x) in positions {
-      if !force_set && Some(&window) == gesture_window.as_ref() {
+      let is_gesture_window = Some(&window) == gesture_window.as_ref();
+      if !options.force_set && is_gesture_window {
         continue;
       }
 
@@ -75,7 +91,13 @@ pub(crate) fn arrange_windows_workspace_options(
       };
 
       if extents.size() == window.size() {
-        window.move_to(extents.top_left);
+        if is_gesture_window || !options.animate {
+          wm.animation_manager
+            .set_window_position(window, extents.top_left);
+        } else {
+          wm.animation_manager
+            .animate_window_position(window, extents.top_left);
+        }
       } else {
         window.set_extents(&extents);
       }
@@ -84,7 +106,7 @@ pub(crate) fn arrange_windows_workspace_options(
 }
 
 pub(crate) fn arrange_windows_workspace(wm: &CascadeWindowManager, workspace: Rc<Workspace>) {
-  arrange_windows_workspace_options(wm, workspace, false)
+  arrange_windows_workspace_options(wm, workspace, ArrangeWindowOptions::default());
 }
 
 pub(crate) fn arrange_windows_all_workspaces(wm: &CascadeWindowManager) {
